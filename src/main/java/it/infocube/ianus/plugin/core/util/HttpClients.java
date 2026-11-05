@@ -17,7 +17,7 @@ import javax.net.ssl.X509TrustManager;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
-/** Costruzione dei RestClient verso gli NMS (timeout, TLS, HTTP/1.1). */
+/** Costruzione dei RestClient verso gli NMS (timeout, nuovi tentativi, TLS, HTTP/1.1). */
 public final class HttpClients {
 
     private HttpClients() {
@@ -32,7 +32,7 @@ public final class HttpClients {
         }
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(http.build());
         factory.setReadTimeout(readTimeout);
-        return RestClient.builder().requestFactory(factory);
+        return RestClient.builder().requestFactory(factory).requestInterceptor(new RetryInterceptor());
     }
 
     public static String trimSlash(String url) {

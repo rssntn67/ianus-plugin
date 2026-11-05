@@ -90,6 +90,11 @@ Il corpo contiene sempre `code` e `message`. `complete: false` indica una rispos
 
 ## Come lavora ogni sorgente
 
+Verso tutti gli NMS il plugin fa fino a 3 tentativi, con attese di 200 ms e 1 secondo, su connessione
+fallita e su risposte 502, 503, 504. Il timeout di lettura e gli altri errori HTTP non si ripetono.
+Se la connessione cade durante la lettura a lotti di OpenNMS e Zabbix, la lettura si ferma e la risposta
+contiene quanto letto fino a quel punto, con `complete: false`.
+
 ### OpenNMS
 - **Metriche**: Measurements API (`POST /rest/measurements`) sugli attributi dei grafici dei nodi
   selezionati (`nodes`, vuoto = tutti). Nodi, risorse e attributi sono riletti ogni `discovery-refresh`.

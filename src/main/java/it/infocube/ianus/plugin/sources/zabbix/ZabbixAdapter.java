@@ -33,6 +33,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientException;
 
 /**
@@ -90,6 +91,7 @@ public class ZabbixAdapter implements SourceAdapter {
         int calls = 0;
         int failures = 0;
         RuntimeException last = null;
+        batches:
         for (int valueType : new int[] {0, 3}) {
             List<String> ids = items.stream().filter(i -> i.valueType() == valueType).map(Item::itemId).toList();
             for (int from = 0; from < ids.size(); from += props.batchSize()) {
@@ -97,6 +99,12 @@ public class ZabbixAdapter implements SourceAdapter {
                 calls++;
                 try {
                     history(valueType, chunk, window, samples);
+                } catch (ResourceAccessException e) {
+                    failures++;
+                    last = e;
+                    complete = false;
+                    LOG.warn("Zabbix history.get: Zabbix non raggiungibile, lettura interrotta: {}", e.getMessage());
+                    break batches;
                 } catch (RestClientException | ZabbixException e) {
                     failures++;
                     last = e;

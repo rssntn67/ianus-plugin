@@ -32,6 +32,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientException;
 
 /**
@@ -94,6 +95,11 @@ public class OpenNmsAdapter implements SourceAdapter {
             batches++;
             try {
                 fetch(chunk, window, samples);
+            } catch (ResourceAccessException e) {
+                failures++;
+                last = e;
+                LOG.warn("Measurements API: OpenNMS non raggiungibile, lettura interrotta: {}", e.getMessage());
+                break;
             } catch (RestClientException e) {
                 failures++;
                 last = e;
