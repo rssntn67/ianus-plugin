@@ -85,14 +85,44 @@ curl -H "X-API-Key: $IANUS_API_KEY" \
 ```
 
 Ogni richiesta a `/ianus/**` viene registrata nel log con esito e durata, e ogni lettura da un NMS con il
-suo tempo di risposta; le risposte dalla cache non interrogano l'NMS e non compaiono.
-
-Con NMS irraggiungibile anche `capabilities` risponde `503`. Fa eccezione Icinga, che risponde con quanto
-ha nel buffer.
+suo tempo di risposta.
 
 Errori: `400` finestra non supportata / `end` non allineato o futuro / paginazione errata,
 `401` API key assente o errata, `404` sorgente non configurata, `503` NMS non raggiungibile.
 Il corpo contiene sempre `code` e `message`. `complete: false` indica una risposta parziale.
+
+## Raccolta e consolidamento
+
+Il plugin non interroga gli NMS durante le richieste di IANUS, salvo `/ianus/v2/health`. Per ogni sorgente un
+Collector legge l'NMS a blocchi e li tiene in memoria; una finestra si costruisce consolidando i suoi blocchi. Per
+esempio, con blocchi da 5 minuti una richiesta `PT30M` consolida sei blocchi.
+
+| Parametro | Default | Significato |
+| --- | --- | --- |
+| `ianus.retention` | `PT3H` | Storia conservata in memoria |
+| `ianus.sources.<sorgente>.collect-interval` | `PT5M` | Ampiezza dei blocchi e frequenza di raccolta |
+| `ianus.sources.<sorgente>.collect-delay` | `PT1M` | Attesa dopo la fine del blocco, perché l'NMS abbia i dati |
+
+Il plugin non parte se `collect-interval` non divide ogni finestra supportata, se `retention` è minore della finestra
+più ampia, o se la `retention` di Icinga è minore di `ianus.retention`.
+
+| Situazione | Risposta |
+| --- | --- |
+| Tutti i blocchi presenti e completi | `200`, `complete: true` |
+| Blocchi mancanti o incompleti | `200`, `complete: false`, con i dati dei blocchi presenti |
+| Nessun blocco, finestra dentro la `retention` | `503` |
+| Finestra più vecchia della `retention` | `400` `window_too_old` |
+
+- IANUS deve chiedere una finestra almeno `collect-delay` dopo la sua fine, altrimenti l'ultimo blocco non è ancora
+  raccolto.
+- All'avvio e dopo un'interruzione il Collector recupera i blocchi mancanti dal più recente, nel tempo libero fra un
+  ciclo e l'altro. Un blocco incompleto viene riletto al massimo 3 volte.
+- `capabilities` risponde con metriche e nodi dell'ultimo blocco, anche se l'NMS è giù. `history_depth` è la
+  `retention`. `health` riporta `last_collected`, la fine dell'ultimo blocco raccolto.
+- La storia sta in memoria e riparte vuota a ogni riavvio. Una misura con 50.000 serie e 3 ore di blocchi da 5 minuti
+  ha dato circa 110 MB, a cui si aggiunge la memoria per le risposte: come punto di partenza usare `-Xmx1g`.
+- Il log avvisa se un ciclo dura più di `collect-interval`. Su OpenNMS, con `batch-size` 50 e decine di migliaia di
+  serie il margine è stretto: in quel caso alzare `batch-size`.
 
 ## Come lavora ogni sorgente
 
@@ -106,8 +136,8 @@ contiene quanto letto fino a quel punto, con `complete: false`.
   selezionati (`nodes`, vuoto = tutti). Nodi, risorse e attributi sono riletti ogni `discovery-refresh`.
 - `sample-step` deve corrispondere all'intervallo di raccolta (default 5 minuti): così ogni punto letto
   con aggregazione `AVERAGE` è in pratica un campione, e il plugin ne calcola media, minimo e massimo.
-- `history-depth` non deve superare il periodo conservato a piena risoluzione: oltre, i punti sono già
-  mediati su intervalli più lunghi e minimo e massimo perdono i picchi.
+- `ianus.retention` non deve superare il periodo conservato a piena risoluzione: oltre, i punti recuperati
+  sono già mediati su intervalli più lunghi e minimo e massimo perdono i picchi.
 - I DS di tipo COUNTER sono già restituiti come tassi da OpenNMS, quindi si aggregano come gauge.
 - OpenNMS non espone l'unità di misura: si configura per attributo in `units` (altrimenti `unknown`).
 - **Eventi**: `GET /api/v2/events` con filtro FIQL su `eventTime`.
@@ -165,8 +195,9 @@ it.infocube.ianus.plugin
 │   ├── aggregation   media/min/max, tassi dei contatori, raggruppamento eventi
 │   ├── severity      mappatura delle severità (sezione 6.1)
 │   ├── buffer        buffer in memoria per sorgenti senza storico
+│   ├── collector     raccolta periodica, recupero e archivio dei blocchi
 │   ├── source        interfaccia SourceAdapter
-│   └── service       busta, filtri, paginazione, cache
+│   └── service       consolidamento dei blocchi, busta, filtri, paginazione
 ├── web               controller REST, filtro API key, gestione errori
 └── sources           opennms, prometheus, icinga, zabbix
 ```

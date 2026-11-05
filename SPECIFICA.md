@@ -6,7 +6,7 @@ Versione 2.0 · 14 ottobre 2026 · Antonio Russo
 
 La versione 2.0 definisce il contratto tra l'appliance IANUS e i plugin che raccolgono dati dai sistemi di Network Management (NMS). È il riferimento per lo sviluppo dei plugin previsto in OR8, attività A8.2 "Collettore Dati Rete", e sostituisce la versione del 9 dicembre 2025.
 
-Due scelte guidano la revisione. La finestra temporale è indicata da IANUS nella richiesta (ultimi 5 minuti, ultima mezz'ora). Il plugin restituisce sempre dati sintetici: media, minimo e massimo di ogni serie nella finestra, mai i campioni grezzi.
+Due scelte guidano la revisione. La finestra temporale è indicata da IANUS nella richiesta (ultimi 5 minuti, ultima mezz'ora), mentre il plugin raccoglie i dati dagli NMS a intervalli configurabili. Il plugin restituisce sempre dati sintetici: media, minimo e massimo di ogni serie nella finestra, mai i campioni grezzi.
 
 | Tema | Versione 1.0 | Versione 2.0 |
 | --- | --- | --- |
@@ -14,7 +14,7 @@ Due scelte guidano la revisione. La finestra temporale è indicata da IANUS nell
 | Origine del dato | Non indicata (solo il tracciato log ha `server_id`) | Campi `source` e `node` obbligatori |
 | Valore | Numerico o testuale nello stesso campo | Sempre numerico; gli attributi testuali vanno in `labels` |
 | Unità di misura | Assente | Campo `unit` obbligatorio |
-| Frequenza di raccolta | Non specificata | Finestra indicata nella richiesta (`window`) |
+| Frequenza di raccolta | Non specificata | Configurabile per sorgente; IANUS indica la finestra (`window`) |
 | Granularità | Campioni puntuali | Dati sintetici: media, minimo e massimo per finestra, con numero di campioni |
 | Eventi | Singole occorrenze, senza messaggio | Conteggi per finestra, con messaggio di esempio |
 | Severità | Scale diverse tra sezione 4 e 5 | Scala unica a 4 livelli e tabella di mappatura |
@@ -23,18 +23,18 @@ Due scelte guidano la revisione. La finestra temporale è indicata da IANUS nell
 
 ## 2. Architettura a plugin
 
-È IANUS a interrogare i plugin; ogni plugin interroga il proprio NMS sulla finestra richiesta e restituisce dati già mediati nel formato comune. Le responsabilità del plugin restano quelle della versione 1.0: dialogare con l'NMS, convertire i dati nel modello IANUS, isolare le logiche specifiche di ciascun sistema.
+È IANUS a interrogare i plugin; il plugin raccoglie i dati da ogni NMS a intervalli configurabili, li conserva in memoria e risponde con dati già mediati nel formato comune, senza interrogare l'NMS durante la richiesta. Le responsabilità del plugin restano quelle della versione 1.0: dialogare con l'NMS, convertire i dati nel modello IANUS, isolare le logiche specifiche di ciascun sistema.
 
 ```mermaid
 flowchart TB
     IANUS["Appliance IANUS<br/>rilevamento anomalie con IA"]
     subgraph PLUGIN["Plugin IANUS · un microservizio con le sorgenti abilitate (Spring Boot 4, Java 21)"]
         direction LR
-        CTRL["Controller REST<br/>endpoint /ianus/v2"] --- AGG["Aggregatore<br/>min, media, max"] --- MAP["Mappatura<br/>modello e severità"] --- CLIENT["Client NMS<br/>pattern a 4 livelli"]
+        CTRL["Controller REST<br/>endpoint /ianus/v2"] --- AGG["Consolidamento<br/>min, media, max"] --- STORE["Blocchi raccolti<br/>in memoria"] --- COLL["Collector<br/>un ciclo per sorgente"] --- CLIENT["Client NMS<br/>pattern a 4 livelli"]
     end
     IANUS -- "GET …/metrics?window=PT5M" --> CTRL
     CTRL -- "JSON: media, min, max per serie" --> IANUS
-    CLIENT -- "query su [start, end)" --> OPENNMS["OpenNMS"]
+    CLIENT -- "query periodica su [start, end)" --> OPENNMS["OpenNMS"]
     CLIENT --> PROM["Prometheus"]
     CLIENT --> ZBX["Zabbix"]
     CLIENT --> ICINGA["Icinga 2"]
@@ -46,7 +46,7 @@ Verso l'NMS il plugin usa le API del sistema. Per le sorgenti che inviano dati a
 
 ## 3. Richiesta dei dati: finestra temporale e aggregazione
 
-Ogni richiesta di IANUS indica la finestra di osservazione; il plugin risponde, per ogni serie, con media, minimo e massimo su quella finestra. La frequenza di raccolta non è quindi una configurazione del plugin: è IANUS a decidere quando chiedere e su quale intervallo.
+Ogni richiesta di IANUS indica la finestra di osservazione; il plugin risponde, per ogni serie, con media, minimo e massimo su quella finestra. IANUS decide quando chiedere e su quale finestra; il plugin decide quando leggere gli NMS, con un intervallo configurabile per ogni sorgente, e costruisce la finestra dai blocchi raccolti (sezione 3.4).
 
 ### 3.1 Parametri della richiesta
 
@@ -76,6 +76,17 @@ La finestra comprende l'inizio ed esclude la fine: un campione delle 10:05:00 ap
 Quando l'NMS sa già aggregare su un intervallo, il plugin usa la sua funzione invece di scaricare i campioni: per esempio `avg_over_time`, `min_over_time`, `max_over_time` e `rate` in PromQL per Prometheus. Il risultato deve comunque rispettare le regole sopra.
 
 Con OpenNMS il plugin legge dalla Measurements API i punti con aggregazione `AVERAGE`, con passo pari all'intervallo di raccolta, e ne calcola media, minimo e massimo. Non usa le aggregazioni `MIN` e `MAX`, perché i relativi archivi possono avere una risoluzione più grossolana della finestra.
+
+### 3.4 Raccolta e consolidamento
+
+Il plugin legge ogni NMS a blocchi di ampiezza `collect-interval`, allineati a multipli della loro ampiezza, dopo un'attesa `collect-delay` dalla fine del blocco, perché l'NMS abbia i dati. L'intervallo deve dividere ogni finestra supportata. Le regole della sezione 3.3 si applicano ai blocchi; una finestra si costruisce consolidando i suoi blocchi:
+
+- `value` è la media dei `value` dei blocchi pesata con `samples`; i blocchi con `samples: 0` non pesano;
+- `min` e `max` sono il minimo dei `min` e il massimo dei `max`;
+- `samples` e `count` sono la somma;
+- `first_seen` e `last_seen` sono il primo e l'ultimo; `message`, `labels` e `native_severity` vengono dall'occorrenza più recente.
+
+Il risultato coincide con il calcolo sui campioni originali. Se un blocco della finestra manca o è incompleto, `complete` vale `false`; se non c'è nessun blocco il plugin risponde 503. IANUS deve chiedere una finestra almeno `collect-delay` dopo la sua fine, altrimenti l'ultimo blocco non è ancora raccolto.
 
 ## 4. Modello dati di performance
 
@@ -219,7 +230,7 @@ Tutti i plugin espongono gli stessi endpoint REST e rispondono in JSON con la st
 | `GET /ianus/v2/{source}/metrics` | Serie di performance mediate sulla finestra (sezione 4) |
 | `GET /ianus/v2/{source}/events` | Gruppi di eventi della finestra (sezione 5) |
 | `GET /ianus/v2/{source}/capabilities` | Finestre supportate, metriche e nodi disponibili, profondità storica servibile |
-| `GET /ianus/v2/health` | Stato del plugin e raggiungibilità di ciascun NMS configurato |
+| `GET /ianus/v2/health` | Stato del plugin, raggiungibilità di ciascun NMS configurato e fine dell'ultimo blocco raccolto (`last_collected`) |
 
 Gli endpoint descritti nel SAL4 (`/ianus/opennms/metrics/all`, `/ianus/prometheus/targets`, …) non fanno parte del contratto v2 e non sono più esposti. Il plugin pubblica la specifica OpenAPI 3, generata dal codice (per esempio con springdoc-openapi), e la specifica deve coincidere con questa sezione.
 
@@ -241,22 +252,22 @@ Nell'endpoint eventi l'array si chiama `events`. `complete` vale `false` quando 
 
 | Codice | Quando |
 | --- | --- |
-| 400 | `window` non supportata, `end` non allineato o nel futuro, parametri non validi |
+| 400 | `window` non supportata, `end` non allineato o nel futuro, finestra più vecchia della profondità storica (`window_too_old`), parametri non validi |
 | 401 / 403 | API key assente o non valida |
 | 404 | Sorgente non configurata nel plugin |
-| 503 | NMS non raggiungibile: nessun dato restituito |
+| 503 | Nessun blocco raccolto per la finestra: nessun dato restituito |
 
 Il corpo dell'errore contiene almeno `code` e `message`.
 
 ## 8. Requisiti operativi dei plugin
 
-La scheda OR8 chiede plugin resilienti e tolleranti alla perdita di connessione. Nel modello a richiesta questo si ottiene rendendo ogni finestra richiedibile anche dopo: se IANUS perde una o più chiamate, le ripete in seguito indicando `end`, e il plugin le serve finché l'NMS conserva i dati.
+La scheda OR8 chiede plugin resilienti e tolleranti alla perdita di connessione. Questo si ottiene rendendo ogni finestra richiedibile anche dopo: se IANUS perde una o più chiamate, le ripete in seguito indicando `end`, e il plugin le serve entro la profondità storica. Dopo un riavvio o un'interruzione il Collector recupera da solo i blocchi mancanti, finché l'NMS li conserva.
 
-- **Profondità storica.** Il plugin dichiara in `capabilities` fino a quanto indietro può servire finestre. Il valore dipende dalla retention dell'NMS e va documentato per ogni installazione.
-- **Idempotenza.** La stessa richiesta (sorgente, finestra, filtri) restituisce sempre lo stesso risultato, salvo dati arrivati in ritardo all'NMS.
+- **Profondità storica.** È la `retention` del plugin, configurabile con default di 3 ore, dichiarata in `capabilities`. I dati stanno in memoria: dopo un riavvio tornano disponibili man mano che il Collector li recupera.
+- **Idempotenza.** La stessa richiesta (sorgente, finestra, filtri) restituisce sempre lo stesso risultato, salvo blocchi recuperati nel frattempo. I dati arrivati all'NMS dopo la lettura di un blocco completo non vengono visti.
 - **Tempo.** Plugin e NMS devono essere sincronizzati via NTP. Il plugin converte in UTC ogni istante ricevuto dall'NMS.
-- **Chiamate verso l'NMS.** Timeout configurabile, nuovi tentativi con attesa crescente, nessun blocco dell'intero plugin se un NMS non risponde.
-- **Cache.** Il plugin può conservare in memoria, per un tempo limitato, le risposte complete delle finestre recenti. La cache si riempie alle richieste di IANUS, senza raccolta schedulata, e non sostituisce la capacità di servire una finestra passata su richiesta.
+- **Chiamate verso l'NMS.** Le fa il Collector, con un ciclo separato per ogni sorgente, così un NMS lento non ferma gli altri. Timeout configurabile e nuovi tentativi con attesa crescente. Solo `/ianus/v2/health` interroga gli NMS durante una richiesta.
+- **Cache.** I blocchi raccolti stanno in memoria per la profondità storica e sono l'unica fonte delle risposte a IANUS.
 - **Sicurezza.** IANUS si autentica verso il plugin con una API key inviata nell'header HTTP X-API-Key; senza chiave o con chiave non valida il plugin risponde 401. Ogni installazione ha la propria chiave, sostituibile senza modificare il codice. Le credenziali verso l'NMS stanno nella configurazione o in un secret dell'orchestratore, mai nel codice.
 - **Configurazione.** Per ogni sorgente: URL, credenziali, timeout, filtri di default. Le finestre supportate valgono per tutte le sorgenti. In Spring Boot è una classe `@ConfigurationProperties`. Il plugin si avvia solo con un file di configurazione esterno, indicato all'avvio: senza file non parte, e quello distribuito con il codice è solo un template.
 - **Osservabilità.** Il plugin registra richieste, tempi di risposta dell'NMS, errori e severità non mappate; `/ianus/v2/health` riporta lo stato di ogni sorgente.
