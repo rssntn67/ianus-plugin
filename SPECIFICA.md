@@ -220,7 +220,7 @@ Tutti i plugin espongono gli stessi endpoint REST e rispondono in JSON con la st
 | `GET /ianus/v2/{source}/capabilities` | Finestre supportate, metriche e nodi disponibili, profondità storica servibile |
 | `GET /ianus/v2/health` | Stato del plugin e raggiungibilità di ciascun NMS configurato |
 
-Gli endpoint attuali descritti nel SAL4 (`/ianus/opennms/metrics/all`, `/ianus/prometheus/targets`, …) restano disponibili durante la transizione ma non fanno parte del contratto v2. Ogni plugin pubblica la propria specifica OpenAPI 3, generata dal codice (per esempio con springdoc-openapi), e la specifica deve coincidere con questa sezione.
+Gli endpoint descritti nel SAL4 (`/ianus/opennms/metrics/all`, `/ianus/prometheus/targets`, …) non fanno parte del contratto v2 e non sono più esposti. Ogni plugin pubblica la propria specifica OpenAPI 3, generata dal codice (per esempio con springdoc-openapi), e la specifica deve coincidere con questa sezione.
 
 ### 7.3 Busta della risposta
 
@@ -284,7 +284,7 @@ Un nuovo plugin (Zabbix, Nagios/Icinga 2, Syslog/NiFi/Elasticsearch) replica il 
 - [ ] Eventi raggruppati con `count`, `first_seen`, `last_seen`
 - [ ] Severità normalizzata e severità nativa presenti
 - [ ] Istanti in UTC con suffisso `Z`
-- [ ] API key verificata su ogni endpoint
+- [ ] API key verificata su ogni endpoint `/ianus/**` (la specifica OpenAPI e Swagger UI restano pubbliche)
 - [ ] Specifica OpenAPI pubblicata e coerente con la sezione 7
 - [ ] `capabilities` e `health` implementati
 

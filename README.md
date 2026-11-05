@@ -87,6 +87,9 @@ curl -H "X-API-Key: $IANUS_API_KEY" \
 Ogni richiesta a `/ianus/**` viene registrata nel log con esito e durata, e ogni lettura da un NMS con il
 suo tempo di risposta; le risposte dalla cache non interrogano l'NMS e non compaiono.
 
+Con NMS irraggiungibile anche `capabilities` risponde `503`. Fa eccezione Icinga, che risponde con quanto
+ha nel buffer.
+
 Errori: `400` finestra non supportata / `end` non allineato o futuro / paginazione errata,
 `401` API key assente o errata, `404` sorgente non configurata, `503` NMS non raggiungibile.
 Il corpo contiene sempre `code` e `message`. `complete: false` indica una risposta parziale.

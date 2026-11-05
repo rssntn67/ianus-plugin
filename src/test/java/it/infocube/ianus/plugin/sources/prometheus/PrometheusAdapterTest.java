@@ -104,6 +104,18 @@ class PrometheusAdapterTest {
     }
 
     @Test
+    void capabilitiesWithUnreachablePrometheusAreUnavailable() {
+        PrometheusAdapter adapter = new PrometheusAdapter(props, new StubClient(props) {
+            @Override
+            public List<String> labelValues(String label) {
+                throw new ResourceAccessException("connessione rifiutata");
+            }
+        });
+
+        assertThatThrownBy(adapter::capabilities).isInstanceOf(SourceUnavailableException.class);
+    }
+
+    @Test
     void alertsBecomeEventGroups() {
         PrometheusAdapter adapter = new PrometheusAdapter(props, new StubClient(props));
         List<EventGroup> events = adapter.events(WINDOW, QueryFilter.NONE).items();

@@ -201,8 +201,7 @@ public class PrometheusAdapter implements SourceAdapter {
         try {
             nodes = client.labelValues(props.nodeLabel());
         } catch (RestClientException e) {
-            LOG.warn("Prometheus: valori di {} non letti: {}", props.nodeLabel(), e.getMessage());
-            nodes = List.of();
+            throw new SourceUnavailableException(system(), e.getMessage());
         }
         return new SourceCapabilities(props.metrics().stream().map(PromMetric::name).toList(), nodes,
                 props.historyDepth());
