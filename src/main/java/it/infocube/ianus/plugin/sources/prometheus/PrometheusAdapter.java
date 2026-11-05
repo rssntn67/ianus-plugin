@@ -39,6 +39,7 @@ import org.springframework.web.client.RestClientException;
  * gauge  -> avg/min/max/count_over_time(sel[W])
  * counter-> avg/min/max/count_over_time(rate(sel[R])[W:S])
  * valutate a end - 1 ms, cosi' l'intervallo coincide con [start, end).
+ * Le serie note sono quelle con campioni nell'ultimo series-lookback prima della fine della finestra.
  * Eventi: serie ALERTS{alertstate="firing"} campionata nella finestra.
  */
 @Component
@@ -87,6 +88,8 @@ public class PrometheusAdapter implements SourceAdapter {
                 Map<String, Double> min = run("min_over_time(" + range + ")", at, labelsByKey);
                 Map<String, Double> max = run("max_over_time(" + range + ")", at, labelsByKey);
                 Map<String, Double> count = run("count_over_time(" + range + ")", at, labelsByKey);
+                // serie note ma senza campioni nella finestra: restano con valori null (sezione 3.3)
+                run("count_over_time(" + rangeExpression(m, props.seriesLookback()) + ")", at, labelsByKey);
                 labelsByKey.forEach((key, labels) -> {
                     Double n = count.get(key);
                     long samples = n == null ? 0 : Math.round(n);

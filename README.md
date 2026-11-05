@@ -103,6 +103,9 @@ Il corpo contiene sempre `code` e `message`. `complete: false` indica una rispos
   - gauge: `avg/min/max/count_over_time(selettore[W])`;
   - counter: `avg/min/max/count_over_time(rate(selettore[R])[W:S])`.
 - Un selettore composto (es. `100 - avg by (instance) (...)`) viene valutato come subquery.
+- Una serie senza campioni nella finestra resta nella risposta con valori `null` e `samples: 0` se ha
+  campioni nel periodo `series-lookback` (default 1 ora) prima della fine della finestra; oltre quel
+  periodo sparisce. Costa una query in più per metrica.
 - Le metriche esposte sono quelle elencate in `metrics` (nome IANUS, selettore, tipo, unità, etichette di istanza).
 - **Eventi**: serie `ALERTS{alertstate="firing"}` campionata ogni `alert-step`; ogni periodo di attivazione conta come un'occorrenza.
 

@@ -41,6 +41,8 @@ ianus:
       url: http://localhost:9090
       node-label: instance
       history-depth: P15D
+      # Una serie senza campioni nella finestra esce con valori null se ne ha in questo periodo
+      series-lookback: PT1H
       metrics:
         - name: cpu_usage
           selector: 100 - avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[1m])) * 100

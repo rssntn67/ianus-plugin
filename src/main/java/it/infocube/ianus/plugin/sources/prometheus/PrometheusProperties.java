@@ -13,6 +13,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param rateWindow     finestra di rate() per i contatori
  * @param subqueryStep   passo della subquery con cui si calcolano media/min/max dei tassi
  * @param alertStep      passo con cui si campiona la serie ALERTS per gli eventi
+ * @param seriesLookback periodo prima della fine della finestra in cui cercare le serie note: una serie
+ *                       con campioni in questo periodo ma non nella finestra esce con valori null
  * @param metrics        metriche esposte a IANUS
  */
 @ConfigurationProperties("ianus.sources.prometheus")
@@ -31,6 +33,7 @@ public record PrometheusProperties(
         Duration rateWindow,
         Duration subqueryStep,
         Duration alertStep,
+        Duration seriesLookback,
         List<PromMetric> metrics) {
 
     /**
@@ -59,6 +62,7 @@ public record PrometheusProperties(
         rateWindow = rateWindow == null ? Duration.ofMinutes(1) : rateWindow;
         subqueryStep = subqueryStep == null ? Duration.ofSeconds(30) : subqueryStep;
         alertStep = alertStep == null ? Duration.ofSeconds(15) : alertStep;
+        seriesLookback = seriesLookback == null ? Duration.ofHours(1) : seriesLookback;
         metrics = metrics == null ? List.of() : List.copyOf(metrics);
     }
 }

@@ -1,6 +1,7 @@
 package it.infocube.ianus.plugin.sources.prometheus;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -8,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 import it.infocube.ianus.plugin.core.aggregation.MetricKind;
+import it.infocube.ianus.plugin.core.error.SourceUnavailableException;
 import it.infocube.ianus.plugin.core.model.EventGroup;
 import it.infocube.ianus.plugin.core.model.MetricSeries;
 import it.infocube.ianus.plugin.core.model.Severity;
@@ -15,6 +17,7 @@ import it.infocube.ianus.plugin.core.source.QueryFilter;
 import it.infocube.ianus.plugin.core.window.TimeWindow;
 import it.infocube.ianus.plugin.sources.prometheus.PrometheusProperties.PromMetric;
 import org.junit.jupiter.api.Test;
+import org.springframework.web.client.ResourceAccessException;
 
 class PrometheusAdapterTest {
 
@@ -29,7 +32,7 @@ class PrometheusAdapterTest {
     private final PromMetric mem = new PromMetric("mem", "node_memory_MemAvailable_bytes{job=\"node\"}",
             null, null, null);
     private final PrometheusProperties props = new PrometheusProperties(true, null, "http://localhost:9",
-            null, null, null, null, null, false, null, null, null, null, null, List.of(traffic, cpu, mem));
+            null, null, null, null, null, false, null, null, null, null, null, null, List.of(traffic, cpu, mem));
 
     @Test
     void rangeExpressions() {
@@ -59,6 +62,48 @@ class PrometheusAdapterTest {
     }
 
     @Test
+    void knownSeriesWithoutSamplesStaysWithNulls() {
+        PrometheusAdapter adapter = new PrometheusAdapter(props, new SilentSeriesClient(props));
+        List<MetricSeries> series = adapter.metrics(WINDOW, new QueryFilter(null, java.util.Set.of("mem"))).items();
+
+        assertThat(series).extracting(MetricSeries::node).containsExactlyInAnyOrder("srv-1:9100", "srv-2:9100");
+        assertThat(series).filteredOn(s -> s.node().equals("srv-1:9100")).singleElement().satisfies(s -> {
+            assertThat(s.value()).isEqualTo(150.0);
+            assertThat(s.samples()).isEqualTo(10);
+        });
+        assertThat(series).filteredOn(s -> s.node().equals("srv-2:9100")).singleElement().satisfies(s -> {
+            assertThat(s.value()).isNull();
+            assertThat(s.min()).isNull();
+            assertThat(s.max()).isNull();
+            assertThat(s.samples()).isZero();
+        });
+    }
+
+    @Test
+    void knownSeriesAreSearchedBackFromWindowEnd() {
+        SilentSeriesClient client = new SilentSeriesClient(props);
+        new PrometheusAdapter(props, client).metrics(WINDOW, new QueryFilter(null, java.util.Set.of("mem")));
+
+        assertThat(client.lookbackAt).isEqualTo(Instant.parse("2026-10-14T10:04:59.999Z"));
+    }
+
+    @Test
+    void unreachableDuringKnownSeriesQueryIsUnavailable() {
+        PrometheusAdapter adapter = new PrometheusAdapter(props, new SilentSeriesClient(props) {
+            @Override
+            public List<Map<String, Object>> query(String expr, Instant at) {
+                if (expr.contains("[3600s")) {
+                    throw new ResourceAccessException("connessione rifiutata");
+                }
+                return super.query(expr, at);
+            }
+        });
+
+        assertThatThrownBy(() -> adapter.metrics(WINDOW, new QueryFilter(null, java.util.Set.of("mem"))))
+                .isInstanceOf(SourceUnavailableException.class);
+    }
+
+    @Test
     void alertsBecomeEventGroups() {
         PrometheusAdapter adapter = new PrometheusAdapter(props, new StubClient(props));
         List<EventGroup> events = adapter.events(WINDOW, QueryFilter.NONE).items();
@@ -69,6 +114,31 @@ class PrometheusAdapterTest {
             assertThat(e.firstSeen()).isEqualTo("2026-10-14T10:00:00Z");
             assertThat(e.lastSeen()).isEqualTo("2026-10-14T10:03:00Z");
         });
+    }
+
+    /** srv-2 e' nota (campioni nell'ultima ora) ma non ha campioni nella finestra di 5 minuti. */
+    static class SilentSeriesClient extends StubClient {
+        Instant lookbackAt;
+
+        SilentSeriesClient(PrometheusProperties p) {
+            super(p);
+        }
+
+        @Override
+        public List<Map<String, Object>> query(String expr, Instant at) {
+            List<Map<String, Object>> active = List.of(row("srv-1:9100", at, expr));
+            if (!expr.contains("[3600s")) {
+                return active;
+            }
+            lookbackAt = at;
+            return List.of(active.get(0), row("srv-2:9100", at, expr));
+        }
+
+        private static Map<String, Object> row(String instance, Instant at, String expr) {
+            String v = expr.startsWith("avg") ? "150" : expr.startsWith("min") ? "100"
+                    : expr.startsWith("max") ? "200" : "10";
+            return Map.of("metric", Map.of("instance", instance), "value", List.<Object>of(at.getEpochSecond(), v));
+        }
     }
 
     static class StubClient extends PrometheusClient {
