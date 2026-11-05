@@ -5,6 +5,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Stream;
 
 import it.infocube.ianus.plugin.core.aggregation.EventAggregator;
 import it.infocube.ianus.plugin.core.aggregation.Sample;
@@ -50,6 +52,18 @@ public class IcingaAdapter implements SourceAdapter {
     private static final String[] SERVICE_STATES = {"OK", "WARNING", "CRITICAL", "UNKNOWN"};
     private static final String[] HOST_STATES = {"UP", "DOWN"};
 
+    /** Periodo in cui Icinga non ha risposto: dall'ultimo poll riuscito al successivo. */
+    private record Outage(Instant start, Instant end) {
+
+        boolean overlaps(TimeWindow window) {
+            return window.start().isBefore(end) && start.isBefore(window.end());
+        }
+
+        boolean covers(TimeWindow window) {
+            return !window.start().isBefore(start) && !window.end().isAfter(end);
+        }
+    }
+
     private final IcingaProperties props;
     private final IcingaClient client;
     private final Clock clock;
@@ -58,7 +72,9 @@ public class IcingaAdapter implements SourceAdapter {
     private final Map<String, Double> lastExecution = new ConcurrentHashMap<>();
     private final Map<String, Double> lastStateChange = new ConcurrentHashMap<>();
     private final Instant startedAt;
+    private final List<Outage> outages = new CopyOnWriteArrayList<>();
     private volatile Instant lastSuccessfulPoll;
+    private volatile Instant outageStart;
 
     @Autowired
     public IcingaAdapter(IcingaProperties props, Clock clock) {
@@ -87,13 +103,22 @@ public class IcingaAdapter implements SourceAdapter {
         try {
             client.hosts().forEach(h -> process(h, true));
             client.services().forEach(s -> process(s, false));
-            lastSuccessfulPoll = clock.instant();
+            Instant now = clock.instant();
+            if (outageStart != null) {
+                outages.add(new Outage(outageStart, now));
+                outageStart = null;
+            }
+            lastSuccessfulPoll = now;
         } catch (RestClientException e) {
             LOG.warn("Icinga non raggiungibile: {}", e.getMessage());
+            if (outageStart == null) {
+                outageStart = lastSuccessfulPoll == null ? startedAt : lastSuccessfulPoll;
+            }
         }
         Instant cutoff = clock.instant().minus(props.retention());
         samples.prune(cutoff);
         events.prune(cutoff);
+        outages.removeIf(o -> o.end().isBefore(cutoff));
     }
 
     void process(Map<String, Object> object, boolean host) {
@@ -141,25 +166,35 @@ public class IcingaAdapter implements SourceAdapter {
 
     @Override
     public SourceResult<MetricSeries> metrics(TimeWindow window, QueryFilter filter) {
-        requireData();
+        requireData(window);
         return new SourceResult<>(samples.aggregate(window, filter), covers(window));
     }
 
     @Override
     public SourceResult<EventGroup> events(TimeWindow window, QueryFilter filter) {
-        requireData();
+        requireData(window);
         return new SourceResult<>(EventAggregator.group(events.in(window), window), covers(window));
     }
 
-    /** La finestra e' completa solo se il plugin stava gia' raccogliendo al suo inizio. */
+    /** La finestra e' completa se il plugin stava gia' raccogliendo al suo inizio e Icinga ha sempre risposto. */
     private boolean covers(TimeWindow window) {
-        return !window.start().isBefore(startedAt);
+        return !window.start().isBefore(startedAt) && allOutages().noneMatch(o -> o.overlaps(window));
     }
 
-    private void requireData() {
+    private void requireData(TimeWindow window) {
         if (lastSuccessfulPoll == null) {
             throw new SourceUnavailableException(system(), "nessuna interrogazione di Icinga riuscita finora");
         }
+        if (allOutages().anyMatch(o -> o.covers(window))) {
+            throw new SourceUnavailableException(system(), "Icinga non ha risposto per tutta la finestra");
+        }
+    }
+
+    /** Interruzioni concluse piu' quella eventualmente in corso. */
+    private Stream<Outage> allOutages() {
+        Instant open = outageStart;
+        return open == null ? outages.stream()
+                : Stream.concat(outages.stream(), Stream.of(new Outage(open, clock.instant())));
     }
 
     @Override

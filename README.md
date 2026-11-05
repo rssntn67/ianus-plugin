@@ -113,6 +113,9 @@ Il corpo contiene sempre `code` e `message`. `complete: false` indica una rispos
   con conversione delle unità (ms → seconds, KB → bytes, `c` → contatore).
 - **Eventi**: cambi di stato di host e servizi (`last_state_change`).
 - Dopo un riavvio il buffer riparte vuoto: le finestre precedenti all'avvio risultano `complete: false`.
+- Se Icinga smette di rispondere, le finestre toccate dall'interruzione risultano `complete: false`;
+  quelle interamente dentro l'interruzione rispondono `503`. Una sola interrogazione fallita basta a
+  segnalarlo. Le interruzioni più vecchie di `retention` non vengono più ricordate.
 - Utente API consigliato in Icinga (sola lettura):
   ```
   object ApiUser "ianus" {
