@@ -28,7 +28,7 @@ Due scelte guidano la revisione. La finestra temporale è indicata da IANUS nell
 ```mermaid
 flowchart TB
     IANUS["Appliance IANUS<br/>rilevamento anomalie con IA"]
-    subgraph PLUGIN["Plugin IANUS · un microservizio per sorgente (Spring Boot 4, Java 21)"]
+    subgraph PLUGIN["Plugin IANUS · un microservizio con le sorgenti abilitate (Spring Boot 4, Java 21)"]
         direction LR
         CTRL["Controller REST<br/>endpoint /ianus/v2"] --- AGG["Aggregatore<br/>min, media, max"] --- MAP["Mappatura<br/>modello e severità"] --- CLIENT["Client NMS<br/>pattern a 4 livelli"]
     end
@@ -220,7 +220,7 @@ Tutti i plugin espongono gli stessi endpoint REST e rispondono in JSON con la st
 | `GET /ianus/v2/{source}/capabilities` | Finestre supportate, metriche e nodi disponibili, profondità storica servibile |
 | `GET /ianus/v2/health` | Stato del plugin e raggiungibilità di ciascun NMS configurato |
 
-Gli endpoint descritti nel SAL4 (`/ianus/opennms/metrics/all`, `/ianus/prometheus/targets`, …) non fanno parte del contratto v2 e non sono più esposti. Ogni plugin pubblica la propria specifica OpenAPI 3, generata dal codice (per esempio con springdoc-openapi), e la specifica deve coincidere con questa sezione.
+Gli endpoint descritti nel SAL4 (`/ianus/opennms/metrics/all`, `/ianus/prometheus/targets`, …) non fanno parte del contratto v2 e non sono più esposti. Il plugin pubblica la specifica OpenAPI 3, generata dal codice (per esempio con springdoc-openapi), e la specifica deve coincidere con questa sezione.
 
 ### 7.3 Busta della risposta
 
@@ -257,15 +257,15 @@ La scheda OR8 chiede plugin resilienti e tolleranti alla perdita di connessione.
 - **Chiamate verso l'NMS.** Timeout configurabile, nuovi tentativi con attesa crescente, nessun blocco dell'intero plugin se un NMS non risponde.
 - **Cache.** Il plugin può conservare in memoria, per un tempo limitato, le risposte complete delle finestre recenti. La cache si riempie alle richieste di IANUS, senza raccolta schedulata, e non sostituisce la capacità di servire una finestra passata su richiesta.
 - **Sicurezza.** IANUS si autentica verso il plugin con una API key inviata nell'header HTTP X-API-Key; senza chiave o con chiave non valida il plugin risponde 401. Ogni installazione ha la propria chiave, sostituibile senza modificare il codice. Le credenziali verso l'NMS stanno nella configurazione o in un secret dell'orchestratore, mai nel codice.
-- **Configurazione.** Per ogni sorgente: URL, credenziali, timeout, finestre supportate, filtri di default. In Spring Boot è una classe `@ConfigurationProperties`. Il plugin si avvia solo con un file di configurazione esterno, indicato all'avvio: senza file non parte, e quello distribuito con il codice è solo un template.
+- **Configurazione.** Per ogni sorgente: URL, credenziali, timeout, filtri di default. Le finestre supportate valgono per tutte le sorgenti. In Spring Boot è una classe `@ConfigurationProperties`. Il plugin si avvia solo con un file di configurazione esterno, indicato all'avvio: senza file non parte, e quello distribuito con il codice è solo un template.
 - **Osservabilità.** Il plugin registra richieste, tempi di risposta dell'NMS, errori e severità non mappate; `/ianus/v2/health` riporta lo stato di ogni sorgente.
-- **Distribuzione.** Ogni plugin è un microservizio containerizzato, distribuibile sull'orchestratore Kubernetes predisposto in A8.1.
+- **Distribuzione.** Il plugin è un microservizio containerizzato che ospita le sorgenti abilitate nel file di configurazione, distribuibile sull'orchestratore Kubernetes predisposto in A8.1. Per isolare una sorgente basta avviare un'istanza con quella sola sorgente abilitata.
 
 ## 9. Come sviluppare un nuovo plugin
 
 Un nuovo plugin (per esempio Nagios Core o Syslog/NiFi/Elasticsearch) replica il pattern a quattro livelli di IANUS Plugin e aggiunge i due componenti richiesti dalla versione 2.0: l'aggregatore e la mappatura delle severità.
 
-1. **Properties.** Classe `@ConfigurationProperties` con URL, credenziali, timeout e finestre supportate della sorgente.
+1. **Properties.** Classe `@ConfigurationProperties` con URL, credenziali e timeout della sorgente.
 2. **Client Config.** Bean `RestClient` con base URL, autenticazione e timeout.
 3. **REST Client / Handler.** Servizio `@Service` con le chiamate generiche e la gestione degli errori dell'NMS.
 4. **API Classes + Models.** Classi che mappano gli endpoint dell'NMS e i relativi POJO Jackson.
