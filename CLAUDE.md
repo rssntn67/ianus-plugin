@@ -16,11 +16,11 @@ No Maven wrapper — use a system `mvn` (3.9+).
 mvn clean verify                                   # build + all tests
 mvn test -Dtest=WindowResolverTest                 # single test class
 mvn test -Dtest=AggregatorTest#methodName          # single test method
-IANUS_API_KEY=some-long-key java -jar target/ianus-plugin-2.0.0-SNAPSHOT.jar
+java -jar target/ianus-plugin-2.0.0-SNAPSHOT.jar --ianus.config=/path/ianus.yml
 docker build -t ianus-plugin:2.0.0 .               # after mvn package (copies target/*.jar)
 ```
 
-The app refuses to start without `IANUS_API_KEY`. All sources are `enabled: false` in `application.yml`; enable via `ianus.sources.<name>.enabled=true` or env vars like `IANUS_SOURCES_OPENNMS_ENABLED=true`. OpenAPI at `/v3/api-docs` and `/swagger-ui.html` (no API key required).
+The app refuses to start without an external config file: the packaged `src/main/resources/application.yml` holds only a mandatory `spring.config.import` of `--ianus.config` / `IANUS_CONFIG` (default `/etc/ianus/ianus.yml`). `config/ianus-template.yml` is only the template to copy and fill in; it is not in the jar, so add new settings there. `ianus.api-key` is also required, and all sources are `enabled: false` in the template. OpenAPI at `/v3/api-docs` and `/swagger-ui.html` (no API key required).
 
 ## Architecture
 
@@ -45,6 +45,6 @@ Package root `it.infocube.ianus.plugin`.
 
 Sources differ in where aggregation happens: Prometheus and OpenNMS push it to the NMS (PromQL `*_over_time` evaluated at `end − 1ms`; OpenNMS Measurements API), Zabbix fetches raw `history.get` samples and aggregates locally, Icinga aggregates from its own buffer.
 
-**Tests** are plain JUnit 5 + AssertJ unit tests (no Spring context, no live NMS). Adapter tests exercise package-private static mapping helpers (e.g. `ZabbixAdapter.toItem`, `toRaw`) with `Map` fixtures; time-dependent code takes an injected `Clock`. Spec §9 lists the minimum test coverage expected for a source (window alignment, gauge/counter incl. reset, empty series, full severity mapping, unreachable NMS).
+**Tests** are mostly plain JUnit 5 + AssertJ unit tests (no live NMS); `IanusPluginApplicationTest`, `JsonSerializationTest` and `ConfigurationFileTest` start the Spring context. `src/test/resources/application.yml` shadows the packaged one, so tests don't need the external file. Adapter tests exercise package-private static mapping helpers (e.g. `ZabbixAdapter.toItem`, `toRaw`) with `Map` fixtures; time-dependent code takes an injected `Clock`. Spec §9 lists the minimum test coverage expected for a source (window alignment, gauge/counter incl. reset, empty series, full severity mapping, unreachable NMS).
 
 `_to_delete/` holds an old archive and is not part of the build.

@@ -1,0 +1,4 @@
+# Sostituisce quello del jar nei test: niente file esterno obbligatorio.
+spring:
+  application:
+    name: ianus-plugin

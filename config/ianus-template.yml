@@ -1,0 +1,76 @@
+# TEMPLATE della configurazione di IANUS Plugin: non viene usato cosi' com'e'.
+# Copiarlo fuori dal repository, compilarlo e avviare il plugin indicando il file:
+#
+#   cp config/ianus-template.yml /etc/ianus/ianus.yml
+#   java -jar ianus-plugin.jar --ianus.config=/etc/ianus/ianus.yml
+#
+# Senza questo file il plugin non si avvia (vedi README, "Configurazione obbligatoria").
+# Il file compilato contiene credenziali in chiaro: proteggerlo e non versionarlo.
+
+server:
+  port: 8080
+
+ianus:
+  # Obbligatoria: IANUS la invia nell'header X-API-Key
+  api-key: ${IANUS_API_KEY:}
+  plugin-version: 2.0.0
+  windows: [PT5M, PT30M]
+  default-page-size: 500
+  max-page-size: 5000
+  cache-ttl: PT10M
+
+  sources:
+    opennms:
+      enabled: false
+      id: opennms-01
+      url: http://localhost:8980/opennms
+      username: ${OPENNMS_USER:admin}
+      password: ${OPENNMS_PASSWORD:}
+      # nodes: [router-core-1, srv-db-01]   # vuoto = tutti i nodi
+      sample-step: PT5M
+      history-depth: P7D
+      units:
+        - attribute: ifHCInOctets
+          unit: bytes_per_second
+        - attribute: ifHCOutOctets
+          unit: bytes_per_second
+
+    prometheus:
+      enabled: false
+      id: prometheus-01
+      url: http://localhost:9090
+      node-label: instance
+      history-depth: P15D
+      metrics:
+        - name: cpu_usage
+          selector: 100 - avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[1m])) * 100
+          kind: gauge
+          unit: percent
+        - name: memory_available
+          selector: node_memory_MemAvailable_bytes
+          kind: gauge
+          unit: bytes
+        - name: if_in_traffic
+          selector: node_network_receive_bytes_total{device!="lo"}
+          kind: counter
+          unit: bytes_per_second
+          instance-labels: [device]
+
+    icinga:
+      enabled: false
+      id: icinga-01
+      url: https://localhost:5665
+      username: ${ICINGA_USER:ianus}
+      password: ${ICINGA_PASSWORD:}
+      insecure: false
+      poll-interval: PT30S
+      retention: PT24H
+
+    zabbix:
+      enabled: false
+      id: zabbix-01
+      url: http://localhost/zabbix/api_jsonrpc.php
+      token: ${ZABBIX_TOKEN:}
+      auth-mode: header
+      history-depth: P7D
+      # host-group-ids: ["2", "4"]

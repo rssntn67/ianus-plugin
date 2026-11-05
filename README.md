@@ -17,23 +17,48 @@ Sorgenti supportate: **OpenNMS**, **Prometheus**, **Icinga 2**, **Zabbix**.
 - Maven 3.9+
 - Spring Boot 4.0 (gestito dal `pom.xml`)
 
+## Configurazione obbligatoria
+
+**Il plugin si avvia solo con un file di configurazione esterno.** Se il file manca, l'avvio fallisce
+con `APPLICATION FAILED TO START`.
+
+[`config/ianus-template.yml`](config/ianus-template.yml) è **solo un template**: non è incluso nel jar
+e non viene mai letto dal plugin. Va copiato e compilato per ogni installazione:
+
+```bash
+cp config/ianus-template.yml /etc/ianus/ianus.yml
+vi /etc/ianus/ianus.yml      # API key, sorgenti abilitate, URL, credenziali
+```
+
+Il percorso del file si indica in uno di questi modi, in ordine di precedenza:
+
+| Modo | Esempio |
+| --- | --- |
+| Argomento | `--ianus.config=/percorso/ianus.yml` |
+| Variabile d'ambiente | `IANUS_CONFIG=/percorso/ianus.yml` |
+| Percorso predefinito | `/etc/ianus/ianus.yml` |
+
+Nel file si possono usare riferimenti a variabili d'ambiente, come `${OPENNMS_PASSWORD:}` nel template.
+`ianus.api-key` è obbligatoria e le sorgenti si abilitano con `ianus.sources.<sorgente>.enabled: true`.
+I valori del file si possono sovrascrivere con variabili d'ambiente
+(`IANUS_SOURCES_OPENNMS_ENABLED=true`, `IANUS_SOURCES_OPENNMS_URL=...`).
+
+Le credenziali scritte nel file sono **in chiaro**: limitare i permessi del file (`chmod 600`) e non
+versionarlo. `ianus.yml` è già escluso dal `.gitignore`.
+
 ## Compilazione e avvio
 
 ```bash
 mvn clean verify
-IANUS_API_KEY=una-chiave-lunga-e-casuale java -jar target/ianus-plugin-2.0.0-SNAPSHOT.jar
+java -jar target/ianus-plugin-2.0.0-SNAPSHOT.jar --ianus.config=/etc/ianus/ianus.yml
 ```
 
-Senza `IANUS_API_KEY` il plugin non si avvia. Le sorgenti si abilitano in `application.yml`
-(`ianus.sources.<sorgente>.enabled: true`) oppure con variabili d'ambiente
-(`IANUS_SOURCES_OPENNMS_ENABLED=true`, `IANUS_SOURCES_OPENNMS_URL=...`).
-
-Immagine container:
+Immagine container: il file si monta sul percorso predefinito.
 
 ```bash
 mvn clean package
 docker build -t ianus-plugin:2.0.0 .
-docker run -e IANUS_API_KEY=... -p 8080:8080 ianus-plugin:2.0.0
+docker run -v /etc/ianus/ianus.yml:/etc/ianus/ianus.yml:ro -p 8080:8080 ianus-plugin:2.0.0
 ```
 
 ## Endpoint
