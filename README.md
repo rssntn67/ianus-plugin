@@ -93,7 +93,10 @@ Il corpo contiene sempre `code` e `message`. `complete: false` indica una rispos
 ### OpenNMS
 - **Metriche**: Measurements API (`POST /rest/measurements`) sugli attributi dei grafici dei nodi
   selezionati (`nodes`, vuoto = tutti). Nodi, risorse e attributi sono riletti ogni `discovery-refresh`.
-- `sample-step` deve corrispondere all'intervallo di raccolta (default 5 minuti).
+- `sample-step` deve corrispondere all'intervallo di raccolta (default 5 minuti): così ogni punto letto
+  con aggregazione `AVERAGE` è in pratica un campione, e il plugin ne calcola media, minimo e massimo.
+- `history-depth` non deve superare il periodo conservato a piena risoluzione: oltre, i punti sono già
+  mediati su intervalli più lunghi e minimo e massimo perdono i picchi.
 - I DS di tipo COUNTER sono già restituiti come tassi da OpenNMS, quindi si aggregano come gauge.
 - OpenNMS non espone l'unità di misura: si configura per attributo in `units` (altrimenti `unknown`).
 - **Eventi**: `GET /api/v2/events` con filtro FIQL su `eventTime`.

@@ -43,7 +43,7 @@ Package root `it.infocube.ianus.plugin`.
 - `buffer.SampleBuffer` / `EventBuffer` — in-memory retention for sources with no history API (Icinga polls on a `@Scheduled` interval; after restart, earlier windows are `complete: false`).
 - `util.Names` (metric names → lowercase snake_case, e.g. `ifHCInOctets` → `if_hc_in_octets`), `util.Times` (output always RFC 3339 UTC with `Z`; parses epoch/ISO/OpenNMS formats).
 
-Sources differ in where aggregation happens: Prometheus and OpenNMS push it to the NMS (PromQL `*_over_time` evaluated at `end − 1ms`; OpenNMS Measurements API), Zabbix fetches raw `history.get` samples and aggregates locally, Icinga aggregates from its own buffer.
+Sources differ in where aggregation happens: Prometheus pushes it to the NMS (PromQL `*_over_time` evaluated at `end − 1ms`), OpenNMS fetches `AVERAGE` points from the Measurements API at `sample-step` and aggregates locally, Zabbix fetches raw `history.get` samples and aggregates locally, Icinga aggregates from its own buffer.
 
 **Tests** are mostly plain JUnit 5 + AssertJ unit tests (no live NMS); `IanusPluginApplicationTest`, `JsonSerializationTest` and `ConfigurationFileTest` start the Spring context. `src/test/resources/application.yml` shadows the packaged one, so tests don't need the external file. Adapter tests exercise package-private static mapping helpers (e.g. `ZabbixAdapter.toItem`, `toRaw`) with `Map` fixtures; time-dependent code takes an injected `Clock`. Spec §9 lists the minimum test coverage expected for a source (window alignment, gauge/counter incl. reset, empty series, full severity mapping, unreachable NMS).
 

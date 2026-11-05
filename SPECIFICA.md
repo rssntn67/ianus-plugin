@@ -72,7 +72,9 @@ La finestra comprende l'inizio ed esclude la fine: un campione delle 10:05:00 ap
 3. **Nessun campione nella finestra**: se la serie è nota al plugin, viene restituita con `value`, `min` e `max` a `null` e `samples: 0`. L'assenza di dati può essere essa stessa un segnale di anomalia e non deve sparire in silenzio.
 4. **Eventi**: il dato sintetico è il conteggio delle occorrenze nella finestra (sezione 5).
 
-Quando l'NMS sa già aggregare su un intervallo, il plugin usa la sua funzione invece di scaricare i campioni: per esempio la Measurements API di OpenNMS con aggregazione `AVERAGE`, `MIN` e `MAX`, oppure `avg_over_time`, `min_over_time`, `max_over_time` e `rate` in PromQL per Prometheus. Il risultato deve comunque rispettare le regole sopra.
+Quando l'NMS sa già aggregare su un intervallo, il plugin usa la sua funzione invece di scaricare i campioni: per esempio `avg_over_time`, `min_over_time`, `max_over_time` e `rate` in PromQL per Prometheus. Il risultato deve comunque rispettare le regole sopra.
+
+Con OpenNMS il plugin legge dalla Measurements API i punti con aggregazione `AVERAGE`, con passo pari all'intervallo di raccolta, e ne calcola media, minimo e massimo. Non usa le aggregazioni `MIN` e `MAX`, perché i relativi archivi possono avere una risoluzione più grossolana della finestra.
 
 ## 4. Modello dati di performance
 
