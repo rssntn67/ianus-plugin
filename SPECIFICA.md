@@ -38,10 +38,11 @@ flowchart TB
     CLIENT --> PROM["Prometheus"]
     CLIENT --> ZBX["Zabbix"]
     CLIENT --> ICINGA["Icinga 2"]
-    CLIENT --> SYSLOG["Syslog/NiFi/ES"]
+    IANUS -- "GET …/syslog/…" --> PSYSLOG["Plugin Syslog<br/>progetto separato"]
+    PSYSLOG --> SYSLOG["Syslog/NiFi/ES"]
 ```
 
-Verso l'NMS il plugin usa le API del sistema. Per le sorgenti che inviano dati al plugin (Syslog, trap SNMP) il plugin conserva quanto riceve per tutta la profondità storica dichiarata (sezione 8), così da poter rispondere su qualunque finestra. OpenNMS, Prometheus, Zabbix e Icinga 2 sono realizzati; Syslog/NiFi/Elasticsearch è da realizzare.
+Verso l'NMS il plugin usa le API del sistema. Per le sorgenti che inviano dati al plugin (Syslog, trap SNMP) il plugin conserva quanto riceve per tutta la profondità storica dichiarata (sezione 8), così da poter rispondere su qualunque finestra. OpenNMS, Prometheus, Zabbix e Icinga 2 sono realizzati in questo plugin; Syslog/NiFi/Elasticsearch è realizzato in un plugin separato, soggetto allo stesso contratto.
 
 ## 3. Richiesta dei dati: finestra temporale e aggregazione
 
@@ -202,7 +203,7 @@ Una severità nativa assente dalla tabella va trattata come `WARNING` e segnalat
 
 ## 7. Serializzazione e contratto OpenAPI
 
-Tutti i plugin espongono gli stessi endpoint REST e rispondono in JSON con la stessa busta. Cambia solo il prefisso della sorgente: `opennms`, `prometheus`, `zabbix`, `icinga`, `syslog`.
+Tutti i plugin espongono gli stessi endpoint REST e rispondono in JSON con la stessa busta. Cambia solo il prefisso della sorgente: `opennms`, `prometheus`, `zabbix`, `icinga`, `syslog`. Il prefisso `syslog` è servito dal plugin separato (sezione 2).
 
 ### 7.1 Regole di formato
 
@@ -263,7 +264,7 @@ La scheda OR8 chiede plugin resilienti e tolleranti alla perdita di connessione.
 
 ## 9. Come sviluppare un nuovo plugin
 
-Un nuovo plugin (per esempio Syslog/NiFi/Elasticsearch) replica il pattern a quattro livelli di IANUS Plugin e aggiunge i due componenti richiesti dalla versione 2.0: l'aggregatore e la mappatura delle severità.
+Un nuovo plugin replica il pattern a quattro livelli di IANUS Plugin e aggiunge i due componenti richiesti dalla versione 2.0: l'aggregatore e la mappatura delle severità.
 
 1. **Properties.** Classe `@ConfigurationProperties` con URL, credenziali e timeout della sorgente.
 2. **Client Config.** Bean `RestClient` con base URL, autenticazione e timeout.
