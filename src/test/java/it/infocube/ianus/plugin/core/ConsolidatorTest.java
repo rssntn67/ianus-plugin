@@ -86,6 +86,35 @@ class ConsolidatorTest {
         });
     }
 
+    private static EventGroup alert(int minute, long count, int continued) {
+        String time = "2026-10-14T10:" + (minute < 10 ? "0" : "") + minute + ":00Z";
+        return new EventGroup("a", "e", "", Severity.ERROR, "Major", count, time, time, null, Map.of(), continued);
+    }
+
+    @Test
+    void runSpanningSixBlocksCountsOnce() {
+        List<EventGroup> r = Consolidator.events(List.of(alert(0, 1, 0), alert(5, 1, 1), alert(10, 1, 1),
+                alert(15, 1, 1), alert(20, 1, 1), alert(25, 1, 1)));
+
+        assertThat(r).singleElement().satisfies(e -> {
+            assertThat(e.count()).isEqualTo(1);
+            assertThat(e.firstSeen()).isEqualTo("2026-10-14T10:00:00Z");
+            assertThat(e.lastSeen()).isEqualTo("2026-10-14T10:25:00Z");
+        });
+    }
+
+    @Test
+    void runAlreadyActiveBeforeTheWindowCountsOnce() {
+        assertThat(Consolidator.events(List.of(alert(0, 1, 1), alert(5, 1, 1))))
+                .singleElement().satisfies(e -> assertThat(e.count()).isEqualTo(1));
+    }
+
+    @Test
+    void newRunInsideBlockIsStillCounted() {
+        assertThat(Consolidator.events(List.of(alert(0, 1, 0), alert(5, 2, 1))))
+                .singleElement().satisfies(e -> assertThat(e.count()).isEqualTo(2));
+    }
+
     @Test
     void eventsAreMergedAcrossBlocks() {
         List<EventGroup> r = Consolidator.events(List.of(

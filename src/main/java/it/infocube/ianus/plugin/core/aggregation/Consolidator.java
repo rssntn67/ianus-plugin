@@ -2,12 +2,15 @@ package it.infocube.ianus.plugin.core.aggregation;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import it.infocube.ianus.plugin.core.model.EventGroup;
 import it.infocube.ianus.plugin.core.model.MetricSeries;
+import it.infocube.ianus.plugin.core.model.Severity;
 
 /**
  * Consolida i blocchi raccolti sulla finestra richiesta. L'input e' l'unione delle voci di tutti
@@ -17,6 +20,9 @@ import it.infocube.ianus.plugin.core.model.MetricSeries;
 public final class Consolidator {
 
     private record Key(String node, String metric, String instance, Map<String, String> labels) {
+    }
+
+    private record EventKey(String node, String eventId, String instance, Severity severity) {
     }
 
     private static final class Acc {
@@ -59,7 +65,14 @@ public final class Consolidator {
         return out;
     }
 
+    /** Un periodo di attivazione a cavallo di due blocchi conta una sola volta. */
     public static List<EventGroup> events(Collection<EventGroup> groups) {
-        return EventAggregator.merge(groups);
+        Set<EventKey> seen = new HashSet<>();
+        List<EventGroup> adjusted = new ArrayList<>(groups.size());
+        for (EventGroup g : groups) {
+            boolean first = seen.add(new EventKey(g.node(), g.eventId(), g.instance(), g.severity()));
+            adjusted.add(first ? g : g.withoutContinued());
+        }
+        return EventAggregator.merge(adjusted);
     }
 }

@@ -55,6 +55,8 @@ class SourceCollectorTest {
         RuntimeException failure;
         boolean metricsComplete = true;
         boolean eventsComplete = true;
+        Instant incompleteBlock;
+        Instant failingBlock;
 
         @Override
         public String system() {
@@ -72,10 +74,13 @@ class SourceCollectorTest {
             if (failure != null) {
                 throw failure;
             }
+            if (window.start().equals(failingBlock)) {
+                throw new SourceUnavailableException("fake", "giu'");
+            }
             assertThat(filter).isEqualTo(QueryFilter.NONE);
             assertThat(window.duration()).isEqualTo(FIVE);
             return new SourceResult<>(List.of(new MetricSeries("a", "m", "", "u", 1.0, 1.0, 1.0, 1, Map.of())),
-                    metricsComplete);
+                    metricsComplete && !window.start().equals(incompleteBlock));
         }
 
         @Override
@@ -234,19 +239,63 @@ class SourceCollectorTest {
         assertThat(adapter.reads).containsExactly(at("10:00:00"), at("09:55:00"));
     }
 
+    private void cycle(String now) {
+        clock.now = at(now);
+        collector.collectDue();
+        while (collector.recoverOne()) {
+            // recupero fino a esaurimento
+        }
+    }
+
+    private long readsOf(String block) {
+        return adapter.reads.stream().filter(at(block)::equals).count();
+    }
+
+    @Test
+    void incompleteBlockIsReadAgainOncePerCycle() {
+        adapter.incompleteBlock = at("10:00:00");
+
+        cycle("10:06:00");
+        assertThat(readsOf("10:00:00")).isEqualTo(1);
+
+        cycle("10:11:00");
+        assertThat(readsOf("10:00:00")).isEqualTo(2);
+    }
+
     @Test
     void incompleteBlockIsReadAtMostThreeMoreTimes() {
-        adapter.metricsComplete = false;
-        SourceCollector shortOne = new SourceCollector(adapter, store, Duration.ofMinutes(1),
-                Duration.ofMinutes(10), clock);
-        shortOne.collectDue();
+        adapter.incompleteBlock = at("10:00:00");
 
-        assertThat(shortOne.recoverOne()).isTrue();
-        assertThat(shortOne.recoverOne()).isTrue();
-        assertThat(shortOne.recoverOne()).isTrue();
-        assertThat(shortOne.recoverOne()).isFalse();
+        for (String now : List.of("10:06:00", "10:11:00", "10:16:00", "10:21:00", "10:26:00", "10:31:00")) {
+            cycle(now);
+        }
 
-        assertThat(adapter.reads).hasSize(4);
+        assertThat(readsOf("10:00:00")).isEqualTo(4);
+    }
+
+    @Test
+    void failedRereadDoesNotCount() {
+        adapter.incompleteBlock = at("10:00:00");
+        cycle("10:06:00");
+
+        adapter.failingBlock = at("10:00:00");
+        cycle("10:11:00");
+        cycle("10:16:00");
+        adapter.failingBlock = null;
+        for (String now : List.of("10:21:00", "10:26:00", "10:31:00", "10:36:00")) {
+            cycle(now);
+        }
+
+        assertThat(readsOf("10:00:00")).isEqualTo(1 + 2 + 3);
+    }
+
+    @Test
+    void readingANewerBlockAgainDoesNotStopOlderOnes() {
+        adapter.incompleteBlock = at("10:00:00");
+
+        cycle("10:06:00");
+
+        assertThat(readsOf("09:55:00")).isEqualTo(1);
     }
 
     @Test

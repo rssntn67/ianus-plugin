@@ -185,9 +185,10 @@ public class IcingaAdapter implements SourceAdapter {
         return new SourceResult<>(EventAggregator.group(events.in(window), window), covers(window));
     }
 
-    /** La finestra e' completa se il plugin stava gia' raccogliendo al suo inizio e Icinga ha sempre risposto. */
+    /** Completa se il plugin raccoglieva gia' al suo inizio, Icinga ha risposto e un poll ne ha visto la fine. */
     private boolean covers(TimeWindow window) {
-        return !window.start().isBefore(startedAt) && allOutages().noneMatch(o -> o.overlaps(window));
+        return !window.start().isBefore(startedAt) && !lastSuccessfulPoll.isBefore(window.end())
+                && allOutages().noneMatch(o -> o.overlaps(window));
     }
 
     private void requireData(TimeWindow window) {

@@ -38,8 +38,9 @@ ianus:
 
 - `collect-interval` e `collect-delay` si leggono per ogni sorgente con una classe `CollectorProperties`, comune a
   tutte le sorgenti. Default: `PT5M` e `PT1M`.
-- All'avvio il plugin si rifiuta di partire se `collect-interval` non divide esattamente ogni finestra supportata, o
-  se `retention` è minore della finestra più ampia.
+- All'avvio il plugin si rifiuta di partire se `collect-interval` non è positivo o non divide esattamente ogni
+  finestra supportata, se `collect-delay` è negativo, o se `retention` è minore della finestra più ampia più
+  `collect-interval` e `collect-delay`.
 - `history-depth` scompare dalle sorgenti: la profondità storica è la `retention`.
 - Per Icinga, `ianus.sources.icinga.retention` deve essere almeno pari a `ianus.retention`, altrimenti il plugin non
   parte.
@@ -81,7 +82,8 @@ Recupero, nel tempo libero fino al ciclo successivo:
 
 - Legge i blocchi mancanti o incompleti dentro la `retention`, dal più recente al più vecchio.
 - Si ferma al primo errore di NMS non raggiungibile e riprende dopo il ciclo successivo.
-- Ogni blocco incompleto viene riletto al massimo 3 volte, per non interrogare all'infinito un dato che non arriverà.
+- Ogni blocco incompleto viene riletto al massimo una volta per ciclo e 3 volte in tutto, per non interrogare
+  all'infinito un dato che non arriverà. Contano solo le riletture a cui l'NMS ha risposto.
 
 Gli adapter non cambiano per questo: Icinga legge dal proprio buffer, quindi i blocchi delle interruzioni restano
 incompleti o mancanti.
@@ -95,7 +97,7 @@ In `core/aggregation`. Dati i blocchi di una finestra, produce le serie e i grup
 | `value` | Media dei `value` dei blocchi pesata con `samples` |
 | `min`, `max` | Minimo dei `min`, massimo dei `max` |
 | `samples` | Somma |
-| `count` | Somma, tramite `EventAggregator.merge` |
+| `count` | Somma, tramite `EventAggregator.merge`; un periodo a cavallo di due blocchi conta una volta |
 | `first_seen`, `last_seen` | Il primo e l'ultimo |
 | `message`, `labels`, `native_severity` degli eventi | Dall'occorrenza più recente |
 

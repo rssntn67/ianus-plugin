@@ -12,7 +12,7 @@ import java.util.TreeSet;
 
 import it.infocube.ianus.plugin.config.IanusProperties;
 import it.infocube.ianus.plugin.core.aggregation.Consolidator;
-import it.infocube.ianus.plugin.core.collector.Block;
+import it.infocube.ianus.plugin.core.collector.BlockStore;
 import it.infocube.ianus.plugin.core.collector.Collectors;
 import it.infocube.ianus.plugin.core.error.BadRequestException;
 import it.infocube.ianus.plugin.core.error.SourceNotFoundException;
@@ -66,11 +66,12 @@ public class IanusService {
         TimeWindow w = resolver.resolve(window, end);
         QueryFilter filter = QueryFilter.of(nodes, metrics);
         Paging paging = paging(page, size);
-        List<MetricSeries> raw = blocks(adapter, w).stream().flatMap(b -> b.metrics().stream())
+        BlockStore.Window blocks = blocks(adapter, w);
+        List<MetricSeries> raw = blocks.blocks().stream().flatMap(b -> b.metrics().stream())
                 .filter(s -> filter.nodeMatches(s.node()) && filter.metricMatches(s.metric()))
                 .toList();
         List<MetricSeries> items = Consolidator.metrics(raw).stream().sorted(METRIC_ORDER).toList();
-        return new MetricsResponse(info(adapter), w.toInfo(), complete(adapter, w),
+        return new MetricsResponse(info(adapter), w.toInfo(), blocks.complete(),
                 new PageInfo(paging.number(), paging.size(), items.size()), slice(items, paging));
     }
 
@@ -80,11 +81,12 @@ public class IanusService {
         TimeWindow w = resolver.resolve(window, end);
         QueryFilter filter = QueryFilter.of(nodes, null);
         Paging paging = paging(page, size);
-        List<EventGroup> raw = blocks(adapter, w).stream().flatMap(b -> b.events().stream())
+        BlockStore.Window blocks = blocks(adapter, w);
+        List<EventGroup> raw = blocks.blocks().stream().flatMap(b -> b.events().stream())
                 .filter(e -> filter.nodeMatches(e.node()))
                 .toList();
         List<EventGroup> items = Consolidator.events(raw);
-        return new EventsResponse(info(adapter), w.toInfo(), complete(adapter, w),
+        return new EventsResponse(info(adapter), w.toInfo(), blocks.complete(),
                 new PageInfo(paging.number(), paging.size(), items.size()), slice(items, paging));
     }
 
@@ -121,20 +123,16 @@ public class IanusService {
     }
 
     /** Blocchi raccolti della finestra: le richieste di IANUS non interrogano mai l'NMS. */
-    private List<Block> blocks(SourceAdapter adapter, TimeWindow w) {
+    private BlockStore.Window blocks(SourceAdapter adapter, TimeWindow w) {
         if (w.start().isBefore(clock.instant().minus(properties.retention()))) {
             throw new BadRequestException("window_too_old",
                     "La finestra e' piu' vecchia della storia conservata: " + properties.retention());
         }
-        List<Block> blocks = collectors.store(adapter.system()).between(w.start(), w.end());
-        if (blocks.isEmpty()) {
+        BlockStore.Window blocks = collectors.store(adapter.system()).window(w.start(), w.end());
+        if (blocks.blocks().isEmpty()) {
             throw new SourceUnavailableException(adapter.system(), "nessun dato raccolto per la finestra");
         }
         return blocks;
-    }
-
-    private boolean complete(SourceAdapter adapter, TimeWindow w) {
-        return collectors.store(adapter.system()).complete(w.start(), w.end());
     }
 
     private SourceAdapter adapter(String source) {

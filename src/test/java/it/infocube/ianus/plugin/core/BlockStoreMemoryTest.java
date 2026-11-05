@@ -33,15 +33,15 @@ class BlockStoreMemoryTest {
             Instant blockStart = start.plus(five.multipliedBy(b));
             List<MetricSeries> series = new ArrayList<>(SERIES);
             for (int i = 0; i < SERIES; i++) {
-                series.add(new MetricSeries("router-core-" + i / 100, "if_hc_in_octets_" + i % 10, "Gigabit0/" + i % 100,
-                        "bytes_per_second", 1.5 * i, 1.0 * i, 2.0 * i, 5,
+                series.add(new MetricSeries("router-core-" + i / 100, "if_hc_in_octets_" + i % 10,
+                        "Gigabit0/" + i % 100, "bytes_per_second", 1.5 * i, 1.0 * i, 2.0 * i, 5,
                         Map.of("resource_id", "node[" + i / 100 + "].interfaceSnmp[Gi0-" + i % 100 + "]")));
             }
             store.put(new Block(blockStart, blockStart.plus(five), series, List.of(), true));
         }
 
         System.out.printf("MEMORIA: %d MB per %d serie e %d blocchi%n", (used() - before) / 1_048_576, SERIES,
-                store.between(start, start.plus(five.multipliedBy(BLOCKS))).size());
+                store.window(start, start.plus(five.multipliedBy(BLOCKS))).blocks().size());
     }
 
     private static long used() {

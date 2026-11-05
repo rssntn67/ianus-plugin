@@ -4,8 +4,10 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import it.infocube.ianus.plugin.core.error.SourceUnavailableException;
 import it.infocube.ianus.plugin.core.model.EventGroup;
@@ -19,7 +21,8 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Ciclo di raccolta di una sorgente: legge il blocco dovuto e, nel tempo libero, recupera quelli
- * mancanti o incompleti entro la retention. Non gestisce thread: lo usa un solo thread alla volta.
+ * mancanti o incompleti entro la retention. Un blocco incompleto si rilegge al massimo una volta per
+ * ciclo, cosi' l'NMS ha il tempo di completare i dati. Non gestisce thread: lo usa un solo thread alla volta.
  */
 public class SourceCollector {
 
@@ -33,6 +36,7 @@ public class SourceCollector {
     private final Duration retention;
     private final Clock clock;
     private final Map<Instant, Integer> rereads = new HashMap<>();
+    private final Set<Instant> readThisCycle = new HashSet<>();
     private Instant lastDue;
 
     public SourceCollector(SourceAdapter adapter, BlockStore store, Duration delay, Duration retention, Clock clock) {
@@ -51,6 +55,8 @@ public class SourceCollector {
             return;
         }
         lastDue = due;
+        readThisCycle.clear();
+        readThisCycle.add(due);
         long start = System.nanoTime();
         read(due);
         Duration elapsed = Duration.ofNanos(System.nanoTime() - start);
@@ -68,11 +74,15 @@ public class SourceCollector {
         for (Instant t = dueStart(now); !t.isBefore(oldest); t = t.minus(interval)) {
             Optional<Block> block = store.get(t);
             if (block.isEmpty()) {
+                readThisCycle.add(t);
                 return read(t);
             }
-            if (!block.get().complete() && rereads.getOrDefault(t, 0) < MAX_REREADS) {
-                rereads.merge(t, 1, Integer::sum);
-                return read(t);
+            if (!block.get().complete() && rereads.getOrDefault(t, 0) < MAX_REREADS && readThisCycle.add(t)) {
+                boolean answered = read(t);
+                if (answered) {
+                    rereads.merge(t, 1, Integer::sum);
+                }
+                return answered;
             }
         }
         return false;

@@ -65,7 +65,7 @@ class BlockStoreTest {
         store.put(block(0, true));
         store.put(block(5, true));
 
-        assertThat(store.between(at(0), at(10))).extracting(Block::start).containsExactly(at(0), at(5));
+        assertThat(store.window(at(0), at(10)).blocks()).extracting(Block::start).containsExactly(at(0), at(5));
     }
 
     @Test
@@ -110,15 +110,34 @@ class BlockStoreTest {
     }
 
     @Test
-    void completeNeedsAllBlocksAndAllComplete() {
-        store.put(block(0, true));
-        assertThat(store.complete(at(0), at(10))).isFalse();
+    void incompleteBlockDoesNotReplaceIncompleteOne() {
+        store.put(block(0, false, series()));
+        store.put(block(0, false));
 
-        store.put(block(5, false));
-        assertThat(store.complete(at(0), at(10))).isFalse();
+        assertThat(store.get(at(0))).hasValueSatisfying(b -> assertThat(b.metrics()).hasSize(1));
+    }
+
+    @Test
+    void windowBlocksAndCompletenessComeFromSameSnapshot() {
+        store.put(block(0, true));
+        BlockStore.Window window = store.window(at(0), at(10));
 
         store.put(block(5, true));
-        assertThat(store.complete(at(0), at(10))).isTrue();
+
+        assertThat(window.blocks()).hasSize(1);
+        assertThat(window.complete()).isFalse();
+    }
+
+    @Test
+    void completeNeedsAllBlocksAndAllComplete() {
+        store.put(block(0, true));
+        assertThat(store.window(at(0), at(10)).complete()).isFalse();
+
+        store.put(block(5, false));
+        assertThat(store.window(at(0), at(10)).complete()).isFalse();
+
+        store.put(block(5, true));
+        assertThat(store.window(at(0), at(10)).complete()).isTrue();
     }
 
     @Test
@@ -161,7 +180,7 @@ class BlockStoreTest {
         AtomicBoolean done = new AtomicBoolean();
         CompletableFuture<Void> reader = CompletableFuture.runAsync(() -> {
             while (!done.get()) {
-                store.between(at(0), at(180)).forEach(b -> assertThat(b.metrics()).hasSize(1));
+                store.window(at(0), at(180)).blocks().forEach(b -> assertThat(b.metrics()).hasSize(1));
             }
         });
 

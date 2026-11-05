@@ -14,6 +14,8 @@ import it.infocube.ianus.plugin.config.CollectorProperties.CollectSettings;
 import it.infocube.ianus.plugin.config.IanusProperties;
 import it.infocube.ianus.plugin.core.source.SourceAdapter;
 import it.infocube.ianus.plugin.core.window.WindowResolver;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.stereotype.Component;
@@ -26,6 +28,9 @@ import org.springframework.stereotype.Component;
 @Component
 public class Collectors implements SmartLifecycle {
 
+    private static final Logger LOG = LoggerFactory.getLogger(Collectors.class);
+    private static final Duration ERROR_PAUSE = Duration.ofSeconds(1);
+
     private final Map<String, BlockStore> stores = new LinkedHashMap<>();
     private final Map<String, SourceCollector> collectors = new LinkedHashMap<>();
     private final List<Thread> threads = new ArrayList<>();
@@ -36,24 +41,37 @@ public class Collectors implements SmartLifecycle {
                       WindowResolver resolver, Clock clock) {
         this.clock = clock;
         List<Duration> windows = resolver.supported();
-        Duration largest = Collections.max(windows);
-        if (properties.retention().compareTo(largest) < 0) {
-            throw new IllegalStateException("ianus.retention (" + properties.retention()
-                    + ") deve coprire la finestra piu' ampia (" + largest + ")");
-        }
         adapters.orderedStream().forEach(adapter -> {
             CollectSettings s = settings.settings(adapter.system());
-            for (Duration window : windows) {
-                if (window.toMillis() % s.collectInterval().toMillis() != 0) {
-                    throw new IllegalStateException("collect-interval di " + adapter.system() + " ("
-                            + s.collectInterval() + ") deve dividere la finestra " + window);
-                }
-            }
+            validate(adapter.system(), s, windows, properties.retention());
             BlockStore store = new BlockStore(s.collectInterval(), properties.retention(), clock);
             stores.put(adapter.system(), store);
             collectors.put(adapter.system(),
                     new SourceCollector(adapter, store, s.collectDelay(), properties.retention(), clock));
         });
+    }
+
+    private static void validate(String system, CollectSettings s, List<Duration> windows, Duration retention) {
+        if (s.collectInterval().toMillis() <= 0) {
+            throw new IllegalStateException("collect-interval di " + system + " deve essere positivo: "
+                    + s.collectInterval());
+        }
+        if (s.collectDelay().isNegative()) {
+            throw new IllegalStateException("collect-delay di " + system + " non puo' essere negativo: "
+                    + s.collectDelay());
+        }
+        for (Duration window : windows) {
+            if (window.toMillis() % s.collectInterval().toMillis() != 0) {
+                throw new IllegalStateException("collect-interval di " + system + " (" + s.collectInterval()
+                        + ") deve dividere la finestra " + window);
+            }
+        }
+        // una finestra si puo' chiedere solo dopo la raccolta del suo ultimo blocco
+        Duration needed = Collections.max(windows).plus(s.collectInterval()).plus(s.collectDelay());
+        if (retention.compareTo(needed) < 0) {
+            throw new IllegalStateException("ianus.retention (" + retention + ") deve essere almeno " + needed
+                    + " per " + system + ": finestra piu' ampia, collect-interval e collect-delay");
+        }
     }
 
     public BlockStore store(String system) {
@@ -80,16 +98,33 @@ public class Collectors implements SmartLifecycle {
     }
 
     private void loop(SourceCollector collector) {
-        try {
-            while (running) {
-                collector.collectDue();
-                boolean recovering = true;
-                while (running && recovering && clock.instant().isBefore(collector.nextRun())) {
-                    recovering = collector.recoverOne();
-                }
-                Instant next = collector.nextRun();
-                Thread.sleep(Duration.between(clock.instant(), next));
+        while (running) {
+            try {
+                cycle(collector);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            } catch (Throwable t) {
+                // anche un OutOfMemoryError: la sorgente non deve fermarsi fino al riavvio
+                LOG.error("Ciclo di raccolta interrotto da un errore", t);
+                pause();
             }
+        }
+    }
+
+    private void cycle(SourceCollector collector) throws InterruptedException {
+        collector.collectDue();
+        Instant next = collector.nextRun();
+        boolean recovering = true;
+        while (running && recovering && clock.instant().isBefore(next)) {
+            recovering = collector.recoverOne();
+        }
+        Thread.sleep(Duration.between(clock.instant(), next));
+    }
+
+    private static void pause() {
+        try {
+            Thread.sleep(ERROR_PAUSE);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }

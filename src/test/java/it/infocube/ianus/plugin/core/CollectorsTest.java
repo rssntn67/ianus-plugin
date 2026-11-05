@@ -2,6 +2,7 @@ package it.infocube.ianus.plugin.core;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -30,7 +31,7 @@ class CollectorsTest {
 
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-10-14T10:06:00Z"), ZoneOffset.UTC);
 
-    private static final class FakeAdapter implements SourceAdapter {
+    private static class FakeAdapter implements SourceAdapter {
 
         @Override
         public String system() {
@@ -59,12 +60,17 @@ class CollectorsTest {
     }
 
     private static Collectors collectors(Duration interval, Duration retention) {
+        return collectors(new FakeAdapter(), new CollectSettings(interval, null), retention, CLOCK);
+    }
+
+    private static Collectors collectors(SourceAdapter adapter, CollectSettings collect, Duration retention,
+                                         Clock clock) {
         DefaultListableBeanFactory factory = new DefaultListableBeanFactory();
-        factory.registerSingleton("fake", new FakeAdapter());
+        factory.registerSingleton("fake", adapter);
         ObjectProvider<SourceAdapter> adapters = factory.getBeanProvider(SourceAdapter.class);
         IanusProperties props = new IanusProperties("k", null, null, null, null, retention);
-        CollectorProperties settings = new CollectorProperties(Map.of("fake", new CollectSettings(interval, null)));
-        return new Collectors(adapters, settings, props, new WindowResolver(props.windows(), CLOCK), CLOCK);
+        CollectorProperties settings = new CollectorProperties(Map.of("fake", collect));
+        return new Collectors(adapters, settings, props, new WindowResolver(props.windows(), clock), clock);
     }
 
     @Test
@@ -77,6 +83,52 @@ class CollectorsTest {
     void retentionMustCoverLargestWindow() {
         assertThatThrownBy(() -> collectors(null, Duration.ofMinutes(20)))
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("retention");
+    }
+
+    @Test
+    void retentionMustLeaveRoomForLargestWindowToBeCollected() {
+        assertThatThrownBy(() -> collectors(null, Duration.ofMinutes(30)))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("retention");
+        assertThat(collectors(null, Duration.ofMinutes(36)).store("fake")).isNotNull();
+    }
+
+    @Test
+    void intervalMustBePositive() {
+        for (Duration interval : List.of(Duration.ZERO, Duration.ofMinutes(-5))) {
+            assertThatThrownBy(() -> collectors(interval, null))
+                    .isInstanceOf(IllegalStateException.class).hasMessageContaining("collect-interval");
+        }
+    }
+
+    @Test
+    void delayMustNotBeNegative() {
+        assertThatThrownBy(() -> collectors(new FakeAdapter(), new CollectSettings(null, Duration.ofMinutes(-1)),
+                null, CLOCK)).isInstanceOf(IllegalStateException.class).hasMessageContaining("collect-delay");
+    }
+
+    @Test
+    void errorInsideLoopDoesNotStopTheSource() {
+        FakeAdapter failingOnce = new FakeAdapter() {
+            private boolean failed;
+
+            @Override
+            public SourceResult<MetricSeries> metrics(TimeWindow window, QueryFilter filter) {
+                if (!failed) {
+                    failed = true;
+                    throw new OutOfMemoryError("simulato");
+                }
+                return super.metrics(window, filter);
+            }
+        };
+        Collectors collectors = collectors(failingOnce, new CollectSettings(Duration.ofSeconds(1), Duration.ZERO),
+                null, Clock.systemUTC());
+
+        collectors.start();
+        try {
+            await().atMost(Duration.ofSeconds(10)).until(() -> collectors.store("fake").latest().isPresent());
+        } finally {
+            collectors.stop();
+        }
     }
 
     @Test

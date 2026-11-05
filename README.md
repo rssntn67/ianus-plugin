@@ -103,8 +103,9 @@ esempio, con blocchi da 5 minuti una richiesta `PT30M` consolida sei blocchi.
 | `ianus.sources.<sorgente>.collect-interval` | `PT5M` | Ampiezza dei blocchi e frequenza di raccolta |
 | `ianus.sources.<sorgente>.collect-delay` | `PT1M` | Attesa dopo la fine del blocco, perché l'NMS abbia i dati |
 
-Il plugin non parte se `collect-interval` non divide ogni finestra supportata, se `retention` è minore della finestra
-più ampia, o se la `retention` di Icinga è minore di `ianus.retention`.
+Il plugin non parte se `collect-interval` non è positivo o non divide ogni finestra supportata, se `collect-delay` è
+negativo, se `retention` è minore della finestra più ampia più `collect-interval` e `collect-delay`, o se la `retention`
+di Icinga è minore di `ianus.retention`.
 
 | Situazione | Risposta |
 | --- | --- |
@@ -116,7 +117,8 @@ più ampia, o se la `retention` di Icinga è minore di `ianus.retention`.
 - IANUS deve chiedere una finestra almeno `collect-delay` dopo la sua fine, altrimenti l'ultimo blocco non è ancora
   raccolto.
 - All'avvio e dopo un'interruzione il Collector recupera i blocchi mancanti dal più recente, nel tempo libero fra un
-  ciclo e l'altro. Un blocco incompleto viene riletto al massimo 3 volte.
+  ciclo e l'altro. Un blocco incompleto viene riletto al massimo una volta per ciclo e 3 volte in tutto, e resta quello
+  già salvato finché non arriva una versione completa.
 - `capabilities` risponde con metriche e nodi dell'ultimo blocco, anche se l'NMS è giù. `history_depth` è la
   `retention`. `health` riporta `last_collected`, la fine dell'ultimo blocco raccolto.
 - La storia sta in memoria e riparte vuota a ogni riavvio. Una misura con 50.000 serie e 3 ore di blocchi da 5 minuti
@@ -151,7 +153,7 @@ contiene quanto letto fino a quel punto, con `complete: false`.
   campioni nel periodo `series-lookback` (default 1 ora) prima della fine della finestra; oltre quel
   periodo sparisce. Costa una query in più per metrica.
 - Le metriche esposte sono quelle elencate in `metrics` (nome IANUS, selettore, tipo, unità, etichette di istanza).
-- **Eventi**: serie `ALERTS{alertstate="firing"}` campionata ogni `alert-step`; ogni periodo di attivazione conta come un'occorrenza.
+- **Eventi**: serie `ALERTS{alertstate="firing"}` campionata ogni `alert-step`; ogni periodo di attivazione conta come un'occorrenza, anche se attraversa più blocchi.
 
 ### Icinga 2
 - L'API REST di Icinga restituisce solo l'ultimo risultato di ogni controllo. Il plugin interroga
@@ -175,8 +177,9 @@ contiene quanto letto fino a quel punto, con `complete: false`.
 - **Metriche**: item numerici (`value_type` 0 e 3) letti con `history.get` nella finestra.
   `metric` = chiave senza parametri (`system.cpu.util` → `system_cpu_util`), `instance` = parametri della chiave.
 - Zabbix non distingue i contatori: quelli da convertire in tassi vanno elencati in `counter-keys` (chiavi
-  senza parametri, es. `net.if.in`). L'unità diventa `<unità>_per_second` e la lettura parte una finestra
-  prima, per avere il campione precedente.
+  senza parametri, es. `net.if.in`). L'unità diventa `<unità>_per_second` e la lettura parte `counter-lookback`
+  prima del blocco (default 15 minuti), per avere il campione precedente: deve superare l'intervallo di
+  aggiornamento degli item, altrimenti il tasso resta `null`.
 - Gli item con preprocessing "Simple change" o "Change per second" hanno già la variazione calcolata e
   restano gauge, anche se elencati.
 - **Un contatore non elencato e senza quel preprocessing esce con il valore grezzo**: il plugin non può

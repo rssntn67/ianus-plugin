@@ -22,6 +22,10 @@ import it.infocube.ianus.plugin.core.model.MetricSeries;
  */
 public class BlockStore {
 
+    /** Blocchi con inizio nella finestra, in ordine crescente; complete = ci sono tutti e sono completi. */
+    public record Window(List<Block> blocks, boolean complete) {
+    }
+
     private record Identity(String node, String metric, String instance, String unit, Map<String, String> labels) {
     }
 
@@ -69,10 +73,9 @@ public class BlockStore {
         return interval;
     }
 
-    /** Salva il blocco; uno completo non viene sostituito da uno incompleto. */
+    /** Salva il blocco; uno gia' presente viene sostituito solo da una versione completa. */
     public synchronized void put(Block block) {
-        Stored existing = blocks.get(block.start());
-        if (existing == null || !existing.complete() || block.complete()) {
+        if (block.complete() || !blocks.containsKey(block.start())) {
             blocks.put(block.start(), store(block));
         }
         prune();
@@ -82,16 +85,12 @@ public class BlockStore {
         return Optional.ofNullable(blocks.get(start)).map(Stored::toBlock);
     }
 
-    /** Blocchi con inizio in [start, end), in ordine crescente. */
-    public List<Block> between(Instant start, Instant end) {
-        return blocks.subMap(start, true, end, false).values().stream().map(Stored::toBlock).toList();
-    }
-
-    /** Vero se [start, end) ha tutti i blocchi attesi e sono tutti completi. */
-    public boolean complete(Instant start, Instant end) {
-        var found = blocks.subMap(start, true, end, false).values();
-        return found.size() == Duration.between(start, end).dividedBy(interval)
+    /** Blocchi di [start, end) e relativa completezza, dalla stessa fotografia dell'archivio. */
+    public Window window(Instant start, Instant end) {
+        List<Stored> found = List.copyOf(blocks.subMap(start, true, end, false).values());
+        boolean complete = found.size() == Duration.between(start, end).dividedBy(interval)
                 && found.stream().allMatch(Stored::complete);
+        return new Window(found.stream().map(Stored::toBlock).toList(), complete);
     }
 
     public Optional<Block> latest() {

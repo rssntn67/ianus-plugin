@@ -83,7 +83,7 @@ Il plugin legge ogni NMS a blocchi di ampiezza `collect-interval`, allineati a m
 
 - `value` è la media dei `value` dei blocchi pesata con `samples`; i blocchi con `samples: 0` non pesano;
 - `min` e `max` sono il minimo dei `min` e il massimo dei `max`;
-- `samples` e `count` sono la somma;
+- `samples` e `count` sono la somma, ma una stessa occorrenza a cavallo di due blocchi, come un alert Prometheus sempre attivo, conta una sola volta;
 - `first_seen` e `last_seen` sono il primo e l'ultimo; `message`, `labels` e `native_severity` vengono dall'occorrenza più recente.
 
 Il risultato coincide con il calcolo sui campioni originali. Se un blocco della finestra manca o è incompleto, `complete` vale `false`; se non c'è nessun blocco il plugin risponde 503. IANUS deve chiedere una finestra almeno `collect-delay` dopo la sua fine, altrimenti l'ultimo blocco non è ancora raccolto.

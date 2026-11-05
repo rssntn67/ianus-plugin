@@ -54,7 +54,7 @@ class ZabbixAdapterTest {
     }
 
     private final ZabbixProperties props = new ZabbixProperties(true, null, "http://localhost:9", null, null,
-            null, null, false, null, null, 1, null, null);
+            null, null, false, null, null, 1, null, null, null);
 
     /** Risponde come l'API: preprocessing solo se richiesto, campioni solo da time_from in poi. */
     private static final class CounterClient extends ZabbixClient {
@@ -72,7 +72,8 @@ class ZabbixAdapterTest {
                         item("2", "net.if.out[eth0]", "Bps", List.of("10"), withSteps),
                         item("3", "net.if.out[eth1]", "", List.of("9"), withSteps),
                         item("4", "net.if.in[eth1]", "", List.of(), withSteps),
-                        item("5", "system.cpu.load", "", List.of(), withSteps));
+                        item("5", "system.cpu.load", "", List.of(), withSteps),
+                        item("6", "net.if.in[slow]", "B", List.of(), withSteps));
             }
             long from = ((Number) p.get("time_from")).longValue();
             String id = ((List<?>) p.get("itemids")).get(0).toString();
@@ -86,6 +87,7 @@ class ZabbixAdapterTest {
                 case "1" -> List.of(sample(id, -60, "1000"), sample(id, 60, "1600"), sample(id, 120, "100"),
                         sample(id, 180, "160"));
                 case "2" -> List.of(sample(id, 60, "10"), sample(id, 120, "20"));
+                case "6" -> List.of(sample(id, -540, "1000"), sample(id, 60, "7000"));
                 default -> List.of();
             };
         }
@@ -107,7 +109,7 @@ class ZabbixAdapterTest {
     }
 
     private final ZabbixProperties counterProps = new ZabbixProperties(true, null, "http://localhost:9", null, null,
-            null, null, false, null, null, 1, null, List.of("net.if.in", "net.if.out"));
+            null, null, false, null, null, 1, null, List.of("net.if.in", "net.if.out"), null);
 
     private MetricSeries series(String metric, String instance) {
         return new ZabbixAdapter(counterProps, new CounterClient(counterProps), Clock.systemUTC())
@@ -125,6 +127,14 @@ class ZabbixAdapterTest {
         assertThat(s.max()).isEqualTo(5.0);
         assertThat(s.samples()).isEqualTo(2);
         assertThat(s.unit()).isEqualTo("bytes_per_second");
+    }
+
+    @Test
+    void counterSlowerThanBlockFindsItsPreviousSample() {
+        MetricSeries s = series("net_if_in", "slow");
+
+        assertThat(s.value()).isEqualTo(10.0);
+        assertThat(s.samples()).isEqualTo(1);
     }
 
     @Test

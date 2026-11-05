@@ -99,6 +99,16 @@ class IcingaAdapterTest {
     }
 
     @Test
+    void windowNotYetCoveredByASuccessfulPollIsIncomplete() {
+        pollAt(5, true);
+        pollAt(9, true);
+        clock.now = T0.plus(Duration.ofMinutes(11));
+
+        assertThat(adapter.metrics(window(5), QueryFilter.NONE).complete()).isFalse();
+        assertThat(adapter.events(window(5), QueryFilter.NONE).complete()).isFalse();
+    }
+
+    @Test
     void windowPartlyInsideOutageIsIncompleteAndKeepsCollectedData() {
         pollAt(5, true);
         pollAt(6, true);

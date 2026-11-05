@@ -98,7 +98,8 @@ public class ZabbixAdapter implements SourceAdapter {
                 List<String> ids = items.stream().filter(i -> i.valueType() == valueType && i.kind() == kind)
                         .map(Item::itemId).toList();
                 // per i contatori serve anche il campione precedente alla finestra
-                Instant timeFrom = kind == MetricKind.COUNTER ? window.start().minus(window.duration()) : window.start();
+                Instant timeFrom = kind == MetricKind.COUNTER ? window.start().minus(props.counterLookback())
+                        : window.start();
                 for (int from = 0; from < ids.size(); from += props.batchSize()) {
                     List<String> chunk = ids.subList(from, Math.min(from + props.batchSize(), ids.size()));
                     calls++;

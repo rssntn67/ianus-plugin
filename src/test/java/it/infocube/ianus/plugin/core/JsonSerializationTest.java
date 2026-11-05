@@ -86,6 +86,7 @@ class JsonSerializationTest {
         assertThat(e.has("labels")).isFalse();
         assertThat(e.has("message")).isFalse();
         assertThat(e.has("eventId")).isFalse();
+        assertThat(e.has("continued")).isFalse();
         assertThat(e.has("firstSeen")).isFalse();
     }
 }

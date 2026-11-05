@@ -104,6 +104,35 @@ class PrometheusAdapterTest {
     }
 
     @Test
+    void alertAlreadyFiringBeforeBlockIsMarkedAsContinued() {
+        PrometheusAdapter adapter = new PrometheusAdapter(props, new StubClient(props) {
+            @Override
+            public List<Map<String, Object>> queryRange(String expr, Instant start, Instant end, Duration step) {
+                double t0 = T0.getEpochSecond();
+                assertThat(start).isEqualTo(T0.minus(step));
+                return List.of(Map.<String, Object>of(
+                        "metric", Map.of("alertname", "HighLoad", "instance", "srv-1:9100"),
+                        "values", List.<Object>of(List.<Object>of(t0 - 15, "1"), List.<Object>of(t0, "1"),
+                                List.<Object>of(t0 + 15, "1"))));
+            }
+        });
+
+        assertThat(adapter.events(WINDOW, QueryFilter.NONE).items()).singleElement().satisfies(e -> {
+            assertThat(e.count()).isEqualTo(1);
+            assertThat(e.continued()).isEqualTo(1);
+            assertThat(e.firstSeen()).isEqualTo("2026-10-14T10:00:00Z");
+        });
+    }
+
+    @Test
+    void alertStartingInsideBlockIsNotContinued() {
+        PrometheusAdapter adapter = new PrometheusAdapter(props, new StubClient(props));
+
+        assertThat(adapter.events(WINDOW, QueryFilter.NONE).items()).singleElement()
+                .satisfies(e -> assertThat(e.continued()).isZero());
+    }
+
+    @Test
     void alertsBecomeEventGroups() {
         PrometheusAdapter adapter = new PrometheusAdapter(props, new StubClient(props));
         List<EventGroup> events = adapter.events(WINDOW, QueryFilter.NONE).items();
@@ -157,7 +186,7 @@ class PrometheusAdapterTest {
 
         @Override
         public List<Map<String, Object>> queryRange(String expr, Instant start, Instant end, Duration step) {
-            double t0 = start.getEpochSecond();
+            double t0 = T0.getEpochSecond();
             return List.of(Map.<String, Object>of(
                     "metric", Map.of("__name__", "ALERTS", "alertname", "HighLoad", "alertstate", "firing",
                             "severity", "critical", "instance", "srv-1:9100"),

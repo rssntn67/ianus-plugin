@@ -73,7 +73,8 @@ public final class EventAggregator {
                 EventGroup later = bIsLater ? b : a;
                 String first = a.firstSeen().compareTo(b.firstSeen()) <= 0 ? a.firstSeen() : b.firstSeen();
                 return new EventGroup(a.node(), a.eventId(), a.instance(), a.severity(), later.nativeSeverity(),
-                        a.count() + b.count(), first, later.lastSeen(), later.message(), later.labels());
+                        a.count() + b.count(), first, later.lastSeen(), later.message(), later.labels(),
+                        a.continued() + b.continued());
             });
         }
         List<EventGroup> out = new ArrayList<>(merged.values());

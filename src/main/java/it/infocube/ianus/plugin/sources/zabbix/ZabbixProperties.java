@@ -15,6 +15,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param maxEvents    eventi massimi letti per finestra
  * @param counterKeys  chiavi (senza parametri) degli item contatore: se non hanno gia' un preprocessing
  *                     di variazione, il plugin ne calcola il tasso al secondo
+ * @param counterLookback periodo prima del blocco in cui cercare il campione precedente dei contatori:
+ *                     deve superare l'intervallo di aggiornamento degli item
  */
 @ConfigurationProperties("ianus.sources.zabbix")
 public record ZabbixProperties(
@@ -30,7 +32,8 @@ public record ZabbixProperties(
         Duration discoveryRefresh,
         Integer batchSize,
         Integer maxEvents,
-        List<String> counterKeys) {
+        List<String> counterKeys,
+        Duration counterLookback) {
 
     public ZabbixProperties {
         id = id == null ? "zabbix" : id;
@@ -42,5 +45,6 @@ public record ZabbixProperties(
         batchSize = batchSize == null ? 500 : batchSize;
         maxEvents = maxEvents == null ? 10_000 : maxEvents;
         counterKeys = counterKeys == null ? List.of() : List.copyOf(counterKeys);
+        counterLookback = counterLookback == null ? Duration.ofMinutes(15) : counterLookback;
     }
 }

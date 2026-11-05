@@ -150,17 +150,21 @@ public class PrometheusAdapter implements SourceAdapter {
     public SourceResult<EventGroup> events(TimeWindow window, QueryFilter filter) {
         List<Map<String, Object>> series;
         try {
-            series = client.queryRange("ALERTS{alertstate=\"firing\"}", window.start(),
+            // un passo prima della finestra, per sapere se l'alert era gia' attivo
+            series = client.queryRange("ALERTS{alertstate=\"firing\"}", window.start().minus(props.alertStep()),
                     window.end().minusMillis(1), props.alertStep());
         } catch (RestClientException e) {
             throw new SourceUnavailableException(system(), e.getMessage());
         }
         double gap = props.alertStep().toMillis() / 1000.0 * 1.5;
+        double windowStart = window.start().toEpochMilli() / 1000.0;
         List<EventGroup> groups = new ArrayList<>();
         for (Map<String, Object> s : series) {
             Map<String, String> labels = new TreeMap<>();
             Json.map(s.get("metric")).forEach((k, v) -> labels.put(k, Json.str(v)));
             long runs = 0;
+            int continued = 0;
+            Double before = null;
             Double prev = null;
             Double first = null;
             Double last = null;
@@ -169,6 +173,13 @@ public class PrometheusAdapter implements SourceAdapter {
                 Double t = pair.isEmpty() ? null : Json.num(pair.get(0));
                 if (t == null) {
                     continue;
+                }
+                if (t < windowStart) {
+                    before = t;
+                    continue;
+                }
+                if (first == null && before != null && t - before <= gap) {
+                    continued = 1;
                 }
                 if (prev == null || t - prev > gap) {
                     runs++;
@@ -189,7 +200,7 @@ public class PrometheusAdapter implements SourceAdapter {
             List.of("__name__", "alertname", "alertstate", "severity", props.nodeLabel()).forEach(rest::remove);
             groups.add(new EventGroup(node, alertName, "", SeverityMapper.map("prometheus", nativeSeverity),
                     nativeSeverity, runs, Times.format(Times.fromEpochSeconds(first)),
-                    Times.format(Times.fromEpochSeconds(last)), alertName, rest));
+                    Times.format(Times.fromEpochSeconds(last)), alertName, rest, continued));
         }
         return new SourceResult<>(EventAggregator.merge(groups), true);
     }
