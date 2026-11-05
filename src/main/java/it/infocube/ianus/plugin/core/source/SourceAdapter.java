@@ -21,7 +21,5 @@ public interface SourceAdapter {
 
     SourceResult<EventGroup> events(TimeWindow window, QueryFilter filter);
 
-    SourceCapabilities capabilities();
-
     SourceHealth health();
 }

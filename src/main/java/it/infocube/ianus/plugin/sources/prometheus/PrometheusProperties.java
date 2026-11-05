@@ -28,7 +28,6 @@ public record PrometheusProperties(
         Duration connectTimeout,
         Duration readTimeout,
         boolean insecure,
-        Duration historyDepth,
         String nodeLabel,
         Duration rateWindow,
         Duration subqueryStep,
@@ -57,7 +56,6 @@ public record PrometheusProperties(
         id = id == null ? "prometheus" : id;
         connectTimeout = connectTimeout == null ? Duration.ofSeconds(5) : connectTimeout;
         readTimeout = readTimeout == null ? Duration.ofSeconds(60) : readTimeout;
-        historyDepth = historyDepth == null ? Duration.ofDays(15) : historyDepth;
         nodeLabel = nodeLabel == null || nodeLabel.isBlank() ? "instance" : nodeLabel;
         rateWindow = rateWindow == null ? Duration.ofMinutes(1) : rateWindow;
         subqueryStep = subqueryStep == null ? Duration.ofSeconds(30) : subqueryStep;

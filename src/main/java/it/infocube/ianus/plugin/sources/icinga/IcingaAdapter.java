@@ -21,7 +21,6 @@ import it.infocube.ianus.plugin.core.model.SourceHealth;
 import it.infocube.ianus.plugin.core.severity.SeverityMapper;
 import it.infocube.ianus.plugin.core.source.QueryFilter;
 import it.infocube.ianus.plugin.core.source.SourceAdapter;
-import it.infocube.ianus.plugin.core.source.SourceCapabilities;
 import it.infocube.ianus.plugin.core.source.SourceResult;
 import it.infocube.ianus.plugin.core.util.Json;
 import it.infocube.ianus.plugin.core.util.Names;
@@ -205,12 +204,6 @@ public class IcingaAdapter implements SourceAdapter {
         Instant open = outageStart;
         return open == null ? outages.stream()
                 : Stream.concat(outages.stream(), Stream.of(new Outage(open, clock.instant())));
-    }
-
-    @Override
-    public SourceCapabilities capabilities() {
-        return new SourceCapabilities(List.copyOf(samples.metrics()), List.copyOf(samples.nodes()),
-                props.retention());
     }
 
     @Override

@@ -1,5 +1,6 @@
 package it.infocube.ianus.plugin.core.service;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -8,11 +9,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeSet;
-import java.util.function.Supplier;
 
 import it.infocube.ianus.plugin.config.IanusProperties;
+import it.infocube.ianus.plugin.core.aggregation.Consolidator;
+import it.infocube.ianus.plugin.core.collector.Block;
+import it.infocube.ianus.plugin.core.collector.Collectors;
 import it.infocube.ianus.plugin.core.error.BadRequestException;
 import it.infocube.ianus.plugin.core.error.SourceNotFoundException;
+import it.infocube.ianus.plugin.core.error.SourceUnavailableException;
 import it.infocube.ianus.plugin.core.model.CapabilitiesResponse;
 import it.infocube.ianus.plugin.core.model.EventGroup;
 import it.infocube.ianus.plugin.core.model.EventsResponse;
@@ -24,20 +28,15 @@ import it.infocube.ianus.plugin.core.model.SourceHealth;
 import it.infocube.ianus.plugin.core.model.SourceInfo;
 import it.infocube.ianus.plugin.core.source.QueryFilter;
 import it.infocube.ianus.plugin.core.source.SourceAdapter;
-import it.infocube.ianus.plugin.core.source.SourceCapabilities;
-import it.infocube.ianus.plugin.core.source.SourceResult;
+import it.infocube.ianus.plugin.core.util.Times;
 import it.infocube.ianus.plugin.core.window.TimeWindow;
 import it.infocube.ianus.plugin.core.window.WindowResolver;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
-/** Logica comune a tutte le sorgenti: finestra, filtri, cache, paginazione, busta della risposta. */
+/** Logica comune a tutte le sorgenti: finestra, consolidamento dei blocchi, filtri, paginazione, busta. */
 @Service
 public class IanusService {
-
-    private static final Logger LOG = LoggerFactory.getLogger(IanusService.class);
 
     static final Comparator<MetricSeries> METRIC_ORDER = Comparator.comparing(MetricSeries::node)
             .thenComparing(MetricSeries::metric)
@@ -46,17 +45,19 @@ public class IanusService {
 
     private final Map<String, SourceAdapter> adapters;
     private final WindowResolver resolver;
-    private final ResultCache cache;
+    private final Collectors collectors;
     private final IanusProperties properties;
+    private final Clock clock;
 
-    public IanusService(ObjectProvider<SourceAdapter> adapters, WindowResolver resolver, ResultCache cache,
-                        IanusProperties properties) {
+    public IanusService(ObjectProvider<SourceAdapter> adapters, WindowResolver resolver, Collectors collectors,
+                        IanusProperties properties, Clock clock) {
         Map<String, SourceAdapter> m = new LinkedHashMap<>();
         adapters.orderedStream().forEach(a -> m.put(a.system(), a));
         this.adapters = Collections.unmodifiableMap(m);
         this.resolver = resolver;
-        this.cache = cache;
+        this.collectors = collectors;
         this.properties = properties;
+        this.clock = clock;
     }
 
     public MetricsResponse metrics(String source, String window, String end, List<String> nodes,
@@ -65,13 +66,11 @@ public class IanusService {
         TimeWindow w = resolver.resolve(window, end);
         QueryFilter filter = QueryFilter.of(nodes, metrics);
         Paging paging = paging(page, size);
-        SourceResult<MetricSeries> result = cache.get(key("metrics", adapter, w, filter),
-                () -> timed(adapter, "metrics", () -> adapter.metrics(w, filter)), SourceResult::complete);
-        List<MetricSeries> items = result.items().stream()
+        List<MetricSeries> raw = blocks(adapter, w).stream().flatMap(b -> b.metrics().stream())
                 .filter(s -> filter.nodeMatches(s.node()) && filter.metricMatches(s.metric()))
-                .sorted(METRIC_ORDER)
                 .toList();
-        return new MetricsResponse(info(adapter), w.toInfo(), result.complete(),
+        List<MetricSeries> items = Consolidator.metrics(raw).stream().sorted(METRIC_ORDER).toList();
+        return new MetricsResponse(info(adapter), w.toInfo(), complete(adapter, w),
                 new PageInfo(paging.number(), paging.size(), items.size()), slice(items, paging));
     }
 
@@ -81,47 +80,61 @@ public class IanusService {
         TimeWindow w = resolver.resolve(window, end);
         QueryFilter filter = QueryFilter.of(nodes, null);
         Paging paging = paging(page, size);
-        SourceResult<EventGroup> result = cache.get(key("events", adapter, w, filter),
-                () -> timed(adapter, "events", () -> adapter.events(w, filter)), SourceResult::complete);
-        List<EventGroup> items = result.items().stream()
+        List<EventGroup> raw = blocks(adapter, w).stream().flatMap(b -> b.events().stream())
                 .filter(e -> filter.nodeMatches(e.node()))
-                .sorted(Comparator.comparing(EventGroup::node).thenComparing(EventGroup::eventId)
-                        .thenComparing(EventGroup::instance).thenComparing(EventGroup::severity))
                 .toList();
-        return new EventsResponse(info(adapter), w.toInfo(), result.complete(),
+        List<EventGroup> items = Consolidator.events(raw);
+        return new EventsResponse(info(adapter), w.toInfo(), complete(adapter, w),
                 new PageInfo(paging.number(), paging.size(), items.size()), slice(items, paging));
     }
 
     public CapabilitiesResponse capabilities(String source) {
         SourceAdapter adapter = adapter(source);
-        SourceCapabilities c = adapter.capabilities();
+        TreeSet<String> metrics = new TreeSet<>();
+        TreeSet<String> nodes = new TreeSet<>();
+        collectors.store(adapter.system()).latest().ifPresent(b -> {
+            b.metrics().forEach(s -> {
+                metrics.add(s.metric());
+                nodes.add(s.node());
+            });
+            b.events().forEach(e -> nodes.add(e.node()));
+        });
         return new CapabilitiesResponse(info(adapter),
                 resolver.supported().stream().map(Duration::toString).toList(),
-                List.copyOf(new TreeSet<>(c.metrics())),
-                List.copyOf(new TreeSet<>(c.nodes())),
-                c.historyDepth() == null ? null : c.historyDepth().toString());
+                List.copyOf(metrics), List.copyOf(nodes), properties.retention().toString());
     }
 
     public HealthResponse health() {
         List<SourceHealth> sources = new ArrayList<>();
         for (SourceAdapter a : adapters.values()) {
+            SourceHealth health;
             try {
-                sources.add(a.health());
+                health = a.health();
             } catch (RuntimeException e) {
-                sources.add(new SourceHealth(a.system(), a.instanceId(), false, e.getMessage()));
+                health = new SourceHealth(a.system(), a.instanceId(), false, e.getMessage());
             }
+            sources.add(health.withLastCollected(collectors.store(a.system()).latest()
+                    .map(b -> Times.format(b.end())).orElse(null)));
         }
         boolean allUp = sources.stream().allMatch(SourceHealth::reachable);
         return new HealthResponse(allUp ? "UP" : "DEGRADED", properties.pluginVersion(), sources);
     }
 
-    /** Tempo di risposta dell'NMS (sezione 8): solo sulle letture reali, non su quelle dalla cache. */
-    private static <T> SourceResult<T> timed(SourceAdapter adapter, String kind, Supplier<SourceResult<T>> call) {
-        long start = System.nanoTime();
-        SourceResult<T> result = call.get();
-        LOG.info("{}: {} letti in {} ms ({} elementi, complete={})", adapter.system(), kind,
-                (System.nanoTime() - start) / 1_000_000, result.items().size(), result.complete());
-        return result;
+    /** Blocchi raccolti della finestra: le richieste di IANUS non interrogano mai l'NMS. */
+    private List<Block> blocks(SourceAdapter adapter, TimeWindow w) {
+        if (w.start().isBefore(clock.instant().minus(properties.retention()))) {
+            throw new BadRequestException("window_too_old",
+                    "La finestra e' piu' vecchia della storia conservata: " + properties.retention());
+        }
+        List<Block> blocks = collectors.store(adapter.system()).between(w.start(), w.end());
+        if (blocks.isEmpty()) {
+            throw new SourceUnavailableException(adapter.system(), "nessun dato raccolto per la finestra");
+        }
+        return blocks;
+    }
+
+    private boolean complete(SourceAdapter adapter, TimeWindow w) {
+        return collectors.store(adapter.system()).complete(w.start(), w.end());
     }
 
     private SourceAdapter adapter(String source) {
@@ -134,11 +147,6 @@ public class IanusService {
 
     private SourceInfo info(SourceAdapter a) {
         return new SourceInfo(a.system(), a.instanceId(), properties.pluginVersion());
-    }
-
-    private static String key(String kind, SourceAdapter a, TimeWindow w, QueryFilter f) {
-        return kind + '|' + a.system() + '|' + w.start() + '|' + w.end() + '|'
-                + new TreeSet<>(f.nodes()) + '|' + new TreeSet<>(f.metrics());
     }
 
     private record Paging(int number, int size) {

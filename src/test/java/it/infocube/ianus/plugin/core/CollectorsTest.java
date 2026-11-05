@@ -19,7 +19,6 @@ import it.infocube.ianus.plugin.core.model.MetricSeries;
 import it.infocube.ianus.plugin.core.model.SourceHealth;
 import it.infocube.ianus.plugin.core.source.QueryFilter;
 import it.infocube.ianus.plugin.core.source.SourceAdapter;
-import it.infocube.ianus.plugin.core.source.SourceCapabilities;
 import it.infocube.ianus.plugin.core.source.SourceResult;
 import it.infocube.ianus.plugin.core.window.TimeWindow;
 import it.infocube.ianus.plugin.core.window.WindowResolver;
@@ -54,11 +53,6 @@ class CollectorsTest {
         }
 
         @Override
-        public SourceCapabilities capabilities() {
-            return new SourceCapabilities(List.of(), List.of(), Duration.ZERO);
-        }
-
-        @Override
         public SourceHealth health() {
             return new SourceHealth("fake", "fake-01", true, "OK");
         }
@@ -68,7 +62,7 @@ class CollectorsTest {
         DefaultListableBeanFactory factory = new DefaultListableBeanFactory();
         factory.registerSingleton("fake", new FakeAdapter());
         ObjectProvider<SourceAdapter> adapters = factory.getBeanProvider(SourceAdapter.class);
-        IanusProperties props = new IanusProperties("k", null, null, null, null, null, null, retention);
+        IanusProperties props = new IanusProperties("k", null, null, null, null, retention);
         CollectorProperties settings = new CollectorProperties(Map.of("fake", new CollectSettings(interval, null)));
         return new Collectors(adapters, settings, props, new WindowResolver(props.windows(), CLOCK), CLOCK);
     }

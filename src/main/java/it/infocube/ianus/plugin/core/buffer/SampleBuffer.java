@@ -5,8 +5,6 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 
 import it.infocube.ianus.plugin.core.aggregation.Aggregator;
@@ -72,18 +70,6 @@ public class SampleBuffer {
             out.add(MetricSeries.of(k.node(), k.metric(), k.instance(), s.unit,
                     Aggregator.of(s.kind, copy, window), s.labels));
         });
-        return out;
-    }
-
-    public Set<String> nodes() {
-        Set<String> out = new TreeSet<>();
-        series.keySet().forEach(k -> out.add(k.node()));
-        return out;
-    }
-
-    public Set<String> metrics() {
-        Set<String> out = new TreeSet<>();
-        series.keySet().forEach(k -> out.add(k.metric()));
         return out;
     }
 }

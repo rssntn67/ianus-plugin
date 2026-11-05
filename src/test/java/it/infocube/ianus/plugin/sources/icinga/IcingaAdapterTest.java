@@ -167,7 +167,7 @@ class IcingaAdapterTest {
 
     @Test
     void retentionShorterThanGlobalOneRefusesToStart() {
-        IanusProperties global = new IanusProperties("k", null, null, null, null, null, null, Duration.ofHours(3));
+        IanusProperties global = new IanusProperties("k", null, null, null, null, Duration.ofHours(3));
 
         assertThatThrownBy(() -> new IcingaAdapter(props, global, clock))
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("retention");

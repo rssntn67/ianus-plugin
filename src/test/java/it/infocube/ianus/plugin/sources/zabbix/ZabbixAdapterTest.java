@@ -54,7 +54,7 @@ class ZabbixAdapterTest {
     }
 
     private final ZabbixProperties props = new ZabbixProperties(true, null, "http://localhost:9", null, null,
-            null, null, false, null, null, null, 1, null, null);
+            null, null, false, null, null, 1, null, null);
 
     /** Risponde come l'API: preprocessing solo se richiesto, campioni solo da time_from in poi. */
     private static final class CounterClient extends ZabbixClient {
@@ -107,7 +107,7 @@ class ZabbixAdapterTest {
     }
 
     private final ZabbixProperties counterProps = new ZabbixProperties(true, null, "http://localhost:9", null, null,
-            null, null, false, null, null, null, 1, null, List.of("net.if.in", "net.if.out"));
+            null, null, false, null, null, 1, null, List.of("net.if.in", "net.if.out"));
 
     private MetricSeries series(String metric, String instance) {
         return new ZabbixAdapter(counterProps, new CounterClient(counterProps), Clock.systemUTC())

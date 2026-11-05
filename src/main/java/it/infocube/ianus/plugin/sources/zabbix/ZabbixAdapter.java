@@ -9,7 +9,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeSet;
 
 import it.infocube.ianus.plugin.core.aggregation.Aggregator;
 import it.infocube.ianus.plugin.core.aggregation.EventAggregator;
@@ -23,7 +22,6 @@ import it.infocube.ianus.plugin.core.model.SourceHealth;
 import it.infocube.ianus.plugin.core.severity.SeverityMapper;
 import it.infocube.ianus.plugin.core.source.QueryFilter;
 import it.infocube.ianus.plugin.core.source.SourceAdapter;
-import it.infocube.ianus.plugin.core.source.SourceCapabilities;
 import it.infocube.ianus.plugin.core.source.SourceResult;
 import it.infocube.ianus.plugin.core.util.Json;
 import it.infocube.ianus.plugin.core.util.Names;
@@ -201,17 +199,6 @@ public class ZabbixAdapter implements SourceAdapter {
         return new RawEvent(host, "zabbix.trigger." + objectId, "",
                 SeverityMapper.map("zabbix", nativeSeverity), nativeSeverity, time,
                 Json.str(ev.get("name")), Map.of("value", state));
-    }
-
-    @Override
-    public SourceCapabilities capabilities() {
-        Set<String> metrics = new TreeSet<>();
-        Set<String> nodes = new TreeSet<>();
-        inventory().items().forEach(i -> {
-            metrics.add(i.metric());
-            nodes.add(i.node());
-        });
-        return new SourceCapabilities(List.copyOf(metrics), List.copyOf(nodes), props.historyDepth());
     }
 
     @Override

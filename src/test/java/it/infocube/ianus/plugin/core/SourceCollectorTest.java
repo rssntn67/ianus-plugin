@@ -19,7 +19,6 @@ import it.infocube.ianus.plugin.core.model.MetricSeries;
 import it.infocube.ianus.plugin.core.model.SourceHealth;
 import it.infocube.ianus.plugin.core.source.QueryFilter;
 import it.infocube.ianus.plugin.core.source.SourceAdapter;
-import it.infocube.ianus.plugin.core.source.SourceCapabilities;
 import it.infocube.ianus.plugin.core.source.SourceResult;
 import it.infocube.ianus.plugin.core.window.TimeWindow;
 import org.junit.jupiter.api.Test;
@@ -82,11 +81,6 @@ class SourceCollectorTest {
         @Override
         public SourceResult<EventGroup> events(TimeWindow window, QueryFilter filter) {
             return new SourceResult<>(List.of(), eventsComplete);
-        }
-
-        @Override
-        public SourceCapabilities capabilities() {
-            return new SourceCapabilities(List.of(), List.of(), Duration.ZERO);
         }
 
         @Override

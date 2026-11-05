@@ -56,11 +56,6 @@ public class PrometheusClient {
         return result(get("/api/v1/query_range", params));
     }
 
-    public List<String> labelValues(String label) {
-        Map<String, Object> body = get("/api/v1/label/" + HttpClients.encode(label) + "/values", Map.of());
-        return Json.list(body.get("data")).stream().map(Json::str).toList();
-    }
-
     public void healthy() {
         rest.get().uri(URI.create(base + "/-/healthy")).retrieve().toBodilessEntity();
     }

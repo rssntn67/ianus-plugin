@@ -32,7 +32,7 @@ class PrometheusAdapterTest {
     private final PromMetric mem = new PromMetric("mem", "node_memory_MemAvailable_bytes{job=\"node\"}",
             null, null, null);
     private final PrometheusProperties props = new PrometheusProperties(true, null, "http://localhost:9",
-            null, null, null, null, null, false, null, null, null, null, null, null, List.of(traffic, cpu, mem));
+            null, null, null, null, null, false, null, null, null, null, null, List.of(traffic, cpu, mem));
 
     @Test
     void rangeExpressions() {
@@ -101,18 +101,6 @@ class PrometheusAdapterTest {
 
         assertThatThrownBy(() -> adapter.metrics(WINDOW, new QueryFilter(null, java.util.Set.of("mem"))))
                 .isInstanceOf(SourceUnavailableException.class);
-    }
-
-    @Test
-    void capabilitiesWithUnreachablePrometheusAreUnavailable() {
-        PrometheusAdapter adapter = new PrometheusAdapter(props, new StubClient(props) {
-            @Override
-            public List<String> labelValues(String label) {
-                throw new ResourceAccessException("connessione rifiutata");
-            }
-        });
-
-        assertThatThrownBy(adapter::capabilities).isInstanceOf(SourceUnavailableException.class);
     }
 
     @Test

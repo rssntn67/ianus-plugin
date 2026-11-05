@@ -17,7 +17,6 @@ ianus:
   windows: [PT5M, PT30M]
   default-page-size: 500
   max-page-size: 5000
-  cache-ttl: PT10M
   # Storia conservata in memoria: le finestre piu' vecchie non si possono chiedere
   retention: PT3H
 
@@ -34,7 +33,6 @@ ianus:
       password: ${OPENNMS_PASSWORD:}
       # nodes: [router-core-1, srv-db-01]   # vuoto = tutti i nodi
       sample-step: PT5M
-      history-depth: P7D
       units:
         - attribute: ifHCInOctets
           unit: bytes_per_second
@@ -50,7 +48,6 @@ ianus:
       id: prometheus-01
       url: http://localhost:9090
       node-label: instance
-      history-depth: P15D
       # Una serie senza campioni nella finestra esce con valori null se ne ha in questo periodo
       series-lookback: PT1H
       metrics:
@@ -92,7 +89,6 @@ ianus:
       url: http://localhost/zabbix/api_jsonrpc.php
       token: ${ZABBIX_TOKEN:}
       auth-mode: header
-      history-depth: P7D
       # host-group-ids: ["2", "4"]
       # Item contatore (chiavi senza parametri): il plugin ne calcola il tasso al secondo.
       # Un contatore non elencato qui e senza preprocessing "change per second" esce con il valore grezzo.

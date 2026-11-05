@@ -20,7 +20,6 @@ import it.infocube.ianus.plugin.core.model.SourceHealth;
 import it.infocube.ianus.plugin.core.severity.SeverityMapper;
 import it.infocube.ianus.plugin.core.source.QueryFilter;
 import it.infocube.ianus.plugin.core.source.SourceAdapter;
-import it.infocube.ianus.plugin.core.source.SourceCapabilities;
 import it.infocube.ianus.plugin.core.source.SourceResult;
 import it.infocube.ianus.plugin.core.util.Json;
 import it.infocube.ianus.plugin.core.util.Times;
@@ -193,18 +192,6 @@ public class PrometheusAdapter implements SourceAdapter {
                     Times.format(Times.fromEpochSeconds(last)), alertName, rest));
         }
         return new SourceResult<>(EventAggregator.merge(groups), true);
-    }
-
-    @Override
-    public SourceCapabilities capabilities() {
-        List<String> nodes;
-        try {
-            nodes = client.labelValues(props.nodeLabel());
-        } catch (RestClientException e) {
-            throw new SourceUnavailableException(system(), e.getMessage());
-        }
-        return new SourceCapabilities(props.metrics().stream().map(PromMetric::name).toList(), nodes,
-                props.historyDepth());
     }
 
     @Override

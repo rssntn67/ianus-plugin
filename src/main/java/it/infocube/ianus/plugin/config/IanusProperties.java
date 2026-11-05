@@ -13,8 +13,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param windows         finestre supportate (almeno PT5M e PT30M)
  * @param defaultPageSize dimensione di pagina se il parametro size non e' indicato
  * @param maxPageSize     dimensione massima di pagina
- * @param cacheTtl        durata della cache delle risposte complete (PT0S per disattivarla)
- * @param cacheMaxEntries numero massimo di risposte in cache
  * @param retention       storia conservata in memoria dai Collector
  */
 @ConfigurationProperties("ianus")
@@ -24,8 +22,6 @@ public record IanusProperties(
         List<Duration> windows,
         Integer defaultPageSize,
         Integer maxPageSize,
-        Duration cacheTtl,
-        Integer cacheMaxEntries,
         Duration retention) {
 
     public IanusProperties {
@@ -35,8 +31,6 @@ public record IanusProperties(
                 : List.copyOf(windows);
         defaultPageSize = defaultPageSize == null ? 500 : defaultPageSize;
         maxPageSize = maxPageSize == null ? 5000 : maxPageSize;
-        cacheTtl = cacheTtl == null ? Duration.ofMinutes(10) : cacheTtl;
-        cacheMaxEntries = cacheMaxEntries == null ? 200 : cacheMaxEntries;
         retention = retention == null ? Duration.ofHours(3) : retention;
     }
 }

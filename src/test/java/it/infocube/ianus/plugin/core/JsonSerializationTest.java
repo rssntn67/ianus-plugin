@@ -11,6 +11,7 @@ import it.infocube.ianus.plugin.core.model.MetricSeries;
 import it.infocube.ianus.plugin.core.model.MetricsResponse;
 import it.infocube.ianus.plugin.core.model.PageInfo;
 import it.infocube.ianus.plugin.core.model.Severity;
+import it.infocube.ianus.plugin.core.model.SourceHealth;
 import it.infocube.ianus.plugin.core.model.SourceInfo;
 import it.infocube.ianus.plugin.core.model.WindowInfo;
 import org.junit.jupiter.api.Test;
@@ -55,6 +56,16 @@ class JsonSerializationTest {
         assertThat(f.path("value").isNumber()).isTrue();
         assertThat(f.path("value").asDouble()).isEqualTo(40.2);
         assertThat(f.path("labels").path("device").asString()).isEqualTo("eth0");
+    }
+
+    @Test
+    void lastCollectedIsSnakeCaseAndOmittedWhenAbsent() {
+        SourceHealth health = new SourceHealth("opennms", "opennms-01", true, "OK");
+
+        assertThat(mapper.valueToTree(health).has("last_collected")).isFalse();
+        JsonNode json = mapper.valueToTree(health.withLastCollected("2026-10-14T10:05:00Z"));
+        assertThat(json.path("last_collected").asString()).isEqualTo("2026-10-14T10:05:00Z");
+        assertThat(json.has("lastCollected")).isFalse();
     }
 
     @Test

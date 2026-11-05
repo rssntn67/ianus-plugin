@@ -26,7 +26,6 @@ public record OpenNmsProperties(
         Duration connectTimeout,
         Duration readTimeout,
         boolean insecure,
-        Duration historyDepth,
         List<String> nodes,
         Duration sampleStep,
         Duration discoveryRefresh,
@@ -41,7 +40,6 @@ public record OpenNmsProperties(
         id = id == null ? "opennms" : id;
         connectTimeout = connectTimeout == null ? Duration.ofSeconds(5) : connectTimeout;
         readTimeout = readTimeout == null ? Duration.ofSeconds(60) : readTimeout;
-        historyDepth = historyDepth == null ? Duration.ofDays(7) : historyDepth;
         nodes = nodes == null ? List.of() : List.copyOf(nodes);
         sampleStep = sampleStep == null ? Duration.ofMinutes(5) : sampleStep;
         discoveryRefresh = discoveryRefresh == null ? Duration.ofHours(1) : discoveryRefresh;

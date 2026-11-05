@@ -57,7 +57,7 @@ class OpenNmsAdapterTest {
     }
 
     private final OpenNmsProperties props = new OpenNmsProperties(true, null, "http://localhost:9", null, null,
-            null, null, false, null, null, null, null, 1, null, null);
+            null, null, false, null, null, null, 1, null, null);
 
     @Test
     void connectionFailureStopsReadingBatches() {

@@ -8,7 +8,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeSet;
 
 import it.infocube.ianus.plugin.core.aggregation.Aggregator;
 import it.infocube.ianus.plugin.core.aggregation.EventAggregator;
@@ -21,7 +20,6 @@ import it.infocube.ianus.plugin.core.model.SourceHealth;
 import it.infocube.ianus.plugin.core.severity.SeverityMapper;
 import it.infocube.ianus.plugin.core.source.QueryFilter;
 import it.infocube.ianus.plugin.core.source.SourceAdapter;
-import it.infocube.ianus.plugin.core.source.SourceCapabilities;
 import it.infocube.ianus.plugin.core.source.SourceResult;
 import it.infocube.ianus.plugin.core.util.Json;
 import it.infocube.ianus.plugin.core.util.Names;
@@ -50,7 +48,7 @@ public class OpenNmsAdapter implements SourceAdapter {
     record SeriesRef(String node, String resourceId, String attribute, String metric, String instance, String unit) {
     }
 
-    record Inventory(List<String> nodes, List<SeriesRef> series, Instant loadedAt) {
+    record Inventory(List<SeriesRef> series, Instant loadedAt) {
     }
 
     private final OpenNmsProperties props;
@@ -228,14 +226,6 @@ public class OpenNmsAdapter implements SourceAdapter {
     }
 
     @Override
-    public SourceCapabilities capabilities() {
-        Inventory inv = inventory();
-        Set<String> metrics = new TreeSet<>();
-        inv.series().forEach(s -> metrics.add(s.metric()));
-        return new SourceCapabilities(List.copyOf(metrics), inv.nodes(), props.historyDepth());
-    }
-
-    @Override
     public SourceHealth health() {
         try {
             client.info();
@@ -271,7 +261,7 @@ public class OpenNmsAdapter implements SourceAdapter {
 
     Inventory discover() {
         Set<String> wanted = Set.copyOf(props.nodes());
-        List<String> nodes = new ArrayList<>();
+        int nodes = 0;
         List<SeriesRef> refs = new ArrayList<>();
         for (Map<String, Object> node : client.nodes()) {
             String id = Json.str(node.get("id"));
@@ -279,11 +269,11 @@ public class OpenNmsAdapter implements SourceAdapter {
             if (id == null || label == null || (!wanted.isEmpty() && !wanted.contains(label))) {
                 continue;
             }
-            nodes.add(label);
+            nodes++;
             collect(client.resourcesForNode(id), label, refs);
         }
-        LOG.info("Inventario OpenNMS: {} nodi, {} serie", nodes.size(), refs.size());
-        return new Inventory(List.copyOf(nodes), List.copyOf(refs), clock.instant());
+        LOG.info("Inventario OpenNMS: {} nodi, {} serie", nodes, refs.size());
+        return new Inventory(List.copyOf(refs), clock.instant());
     }
 
     private void collect(Map<String, Object> resource, String node, List<SeriesRef> refs) {

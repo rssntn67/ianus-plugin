@@ -26,7 +26,6 @@ public record ZabbixProperties(
         Duration connectTimeout,
         Duration readTimeout,
         boolean insecure,
-        Duration historyDepth,
         List<String> hostGroupIds,
         Duration discoveryRefresh,
         Integer batchSize,
@@ -38,7 +37,6 @@ public record ZabbixProperties(
         authMode = authMode == null || authMode.isBlank() ? "header" : authMode;
         connectTimeout = connectTimeout == null ? Duration.ofSeconds(5) : connectTimeout;
         readTimeout = readTimeout == null ? Duration.ofSeconds(60) : readTimeout;
-        historyDepth = historyDepth == null ? Duration.ofDays(7) : historyDepth;
         hostGroupIds = hostGroupIds == null ? List.of() : List.copyOf(hostGroupIds);
         discoveryRefresh = discoveryRefresh == null ? Duration.ofHours(1) : discoveryRefresh;
         batchSize = batchSize == null ? 500 : batchSize;
