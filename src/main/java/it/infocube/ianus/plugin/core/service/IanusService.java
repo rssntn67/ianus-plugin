@@ -130,7 +130,7 @@ public class IanusService {
         }
         BlockStore.Window blocks = collectors.store(adapter.system()).window(w.start(), w.end());
         if (blocks.blocks().isEmpty()) {
-            throw new SourceUnavailableException(adapter.system(), "nessun dato raccolto per la finestra");
+            throw SourceUnavailableException.noBlocks(adapter.system());
         }
         return blocks;
     }

@@ -35,11 +35,11 @@ public class IanusController {
 
     @ApiResponse(responseCode = "200", description = "Media, minimo e massimo di ogni serie nella finestra",
             useReturnTypeSchema = true)
-    @ApiResponse(responseCode = "400", description = "Finestra o parametri non validi",
+    @ApiResponse(responseCode = "400", description = "Finestra non valida o troppo vecchia, parametri non validi",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @ApiResponse(responseCode = "404", description = "Sorgente non configurata",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    @ApiResponse(responseCode = "503", description = "NMS non raggiungibile",
+    @ApiResponse(responseCode = "503", description = "Nessun blocco raccolto per la finestra",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @GetMapping("/{source}/metrics")
     public MetricsResponse metrics(@PathVariable("source") String source,
@@ -54,11 +54,11 @@ public class IanusController {
     }
 
     @ApiResponse(responseCode = "200", description = "Eventi della finestra raggruppati", useReturnTypeSchema = true)
-    @ApiResponse(responseCode = "400", description = "Finestra o parametri non validi",
+    @ApiResponse(responseCode = "400", description = "Finestra non valida o troppo vecchia, parametri non validi",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @ApiResponse(responseCode = "404", description = "Sorgente non configurata",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    @ApiResponse(responseCode = "503", description = "NMS non raggiungibile",
+    @ApiResponse(responseCode = "503", description = "Nessun blocco raccolto per la finestra",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @GetMapping("/{source}/events")
     public EventsResponse events(@PathVariable("source") String source,
@@ -74,8 +74,6 @@ public class IanusController {
     @ApiResponse(responseCode = "200", description = "Finestre, metriche, nodi e profondita' storica",
             useReturnTypeSchema = true)
     @ApiResponse(responseCode = "404", description = "Sorgente non configurata",
-            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    @ApiResponse(responseCode = "503", description = "NMS non raggiungibile",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @GetMapping("/{source}/capabilities")
     public CapabilitiesResponse capabilities(@PathVariable("source") String source) {

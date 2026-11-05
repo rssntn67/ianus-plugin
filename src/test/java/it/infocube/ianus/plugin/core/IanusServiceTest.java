@@ -155,6 +155,12 @@ class IanusServiceTest {
     }
 
     @Test
+    void noBlockMessageDoesNotBlameTheNms() {
+        assertThatThrownBy(() -> service.metrics("fake", "PT5M", null, null, null, null, null))
+                .hasMessage("Nessun blocco raccolto per la finestra (fake)");
+    }
+
+    @Test
     void windowOlderThanRetentionIs400() {
         assertThatThrownBy(() -> service.metrics("fake", "PT5M", "2026-10-14T06:00:00Z", null, null, null, null))
                 .isInstanceOfSatisfying(BadRequestException.class,

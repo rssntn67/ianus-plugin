@@ -151,8 +151,14 @@ class IanusPluginApplicationTest {
         assertThat(docs.at("/paths/~1ianus~1v2~1{source}~1events/get/responses").propertyNames())
                 .contains("200", "400", "401", "404", "503");
         assertThat(docs.at("/paths/~1ianus~1v2~1{source}~1capabilities/get/responses").propertyNames())
-                .contains("200", "401", "404", "503");
+                .contains("200", "401", "404").doesNotContain("503");
         assertThat(docs.at("/paths/~1ianus~1v2~1health/get/responses").propertyNames()).contains("200", "401");
+    }
+
+    @Test
+    void openApi503DescribesMissingData() throws Exception {
+        assertThat(apiDocs().at("/paths/~1ianus~1v2~1{source}~1metrics/get/responses/503/description").asString())
+                .isEqualTo("Nessun blocco raccolto per la finestra");
     }
 
     @Test
