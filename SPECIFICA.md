@@ -37,11 +37,11 @@ flowchart TB
     CLIENT -- "query su [start, end)" --> OPENNMS["OpenNMS"]
     CLIENT --> PROM["Prometheus"]
     CLIENT --> ZBX["Zabbix"]
-    CLIENT --> ICINGA["Nagios/Icinga"]
+    CLIENT --> ICINGA["Icinga 2"]
     CLIENT --> SYSLOG["Syslog/NiFi/ES"]
 ```
 
-Verso l'NMS il plugin usa le API del sistema. Per le sorgenti che inviano dati al plugin (Syslog, trap SNMP) il plugin conserva quanto riceve per tutta la profondità storica dichiarata (sezione 8), così da poter rispondere su qualunque finestra. OpenNMS, Prometheus, Zabbix e Icinga 2 sono realizzati; Nagios Core e Syslog/NiFi/Elasticsearch sono da realizzare.
+Verso l'NMS il plugin usa le API del sistema. Per le sorgenti che inviano dati al plugin (Syslog, trap SNMP) il plugin conserva quanto riceve per tutta la profondità storica dichiarata (sezione 8), così da poter rispondere su qualunque finestra. OpenNMS, Prometheus, Zabbix e Icinga 2 sono realizzati; Syslog/NiFi/Elasticsearch è da realizzare.
 
 ## 3. Richiesta dei dati: finestra temporale e aggregazione
 
@@ -194,7 +194,7 @@ IANUS usa una sola scala a quattro livelli, che unisce quelle delle sezioni 4 e 
 | OpenNMS | Indeterminate, Cleared, Normal | Warning, Minor | Major | Critical |
 | Syslog (RFC 5424) | 5 Notice, 6 Informational, 7 Debug | 4 Warning | 3 Error | 0 Emergency, 1 Alert, 2 Critical |
 | Zabbix | Not classified, Information | Warning | Average, High | Disaster |
-| Nagios Core / Icinga 2 | OK, UP | WARNING, UNKNOWN | UNREACHABLE | CRITICAL, DOWN |
+| Icinga 2 | OK, UP | WARNING, UNKNOWN | UNREACHABLE | CRITICAL, DOWN |
 | Prometheus (etichetta `severity` degli alert) | info, none | warning, etichetta assente | error | critical |
 | Eventi Windows | Information, Verbose, Audit Success | Warning | Error, Audit Failure | Critical |
 
@@ -263,7 +263,7 @@ La scheda OR8 chiede plugin resilienti e tolleranti alla perdita di connessione.
 
 ## 9. Come sviluppare un nuovo plugin
 
-Un nuovo plugin (per esempio Nagios Core o Syslog/NiFi/Elasticsearch) replica il pattern a quattro livelli di IANUS Plugin e aggiunge i due componenti richiesti dalla versione 2.0: l'aggregatore e la mappatura delle severità.
+Un nuovo plugin (per esempio Syslog/NiFi/Elasticsearch) replica il pattern a quattro livelli di IANUS Plugin e aggiunge i due componenti richiesti dalla versione 2.0: l'aggregatore e la mappatura delle severità.
 
 1. **Properties.** Classe `@ConfigurationProperties` con URL, credenziali e timeout della sorgente.
 2. **Client Config.** Bean `RestClient` con base URL, autenticazione e timeout.
