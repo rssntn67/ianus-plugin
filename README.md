@@ -138,7 +138,13 @@ contiene quanto letto fino a quel punto, con `complete: false`.
 ### Zabbix
 - **Metriche**: item numerici (`value_type` 0 e 3) letti con `history.get` nella finestra.
   `metric` = chiave senza parametri (`system.cpu.util` → `system_cpu_util`), `instance` = parametri della chiave.
-- Gli item con preprocessing "Change per second" sono già tassi.
+- Zabbix non distingue i contatori: quelli da convertire in tassi vanno elencati in `counter-keys` (chiavi
+  senza parametri, es. `net.if.in`). L'unità diventa `<unità>_per_second` e la lettura parte una finestra
+  prima, per avere il campione precedente.
+- Gli item con preprocessing "Simple change" o "Change per second" hanno già la variazione calcolata e
+  restano gauge, anche se elencati.
+- **Un contatore non elencato e senza quel preprocessing esce con il valore grezzo**: il plugin non può
+  riconoscerlo da solo.
 - **Eventi**: `event.get` sui trigger (problemi e risoluzioni); `event_id` = `zabbix.trigger.<id>`.
 - Autenticazione: API token di un utente in sola lettura; `auth-mode: header` (Zabbix 6.4+) oppure `param`.
 

@@ -54,7 +54,102 @@ class ZabbixAdapterTest {
     }
 
     private final ZabbixProperties props = new ZabbixProperties(true, null, "http://localhost:9", null, null,
-            null, null, false, null, null, null, 1, null);
+            null, null, false, null, null, null, 1, null, null);
+
+    /** Risponde come l'API: preprocessing solo se richiesto, campioni solo da time_from in poi. */
+    private static final class CounterClient extends ZabbixClient {
+
+        CounterClient(ZabbixProperties props) {
+            super(props);
+        }
+
+        @Override
+        public Object call(String method, Object params, boolean authenticated) {
+            Map<?, ?> p = (Map<?, ?>) params;
+            if ("item.get".equals(method)) {
+                boolean withSteps = p.containsKey("selectPreprocessing");
+                return List.of(item("1", "net.if.in[eth0]", "B", List.of(), withSteps),
+                        item("2", "net.if.out[eth0]", "Bps", List.of("10"), withSteps),
+                        item("3", "net.if.out[eth1]", "", List.of("9"), withSteps),
+                        item("4", "net.if.in[eth1]", "", List.of(), withSteps),
+                        item("5", "system.cpu.load", "", List.of(), withSteps));
+            }
+            long from = ((Number) p.get("time_from")).longValue();
+            String id = ((List<?>) p.get("itemids")).get(0).toString();
+            return samples(id).stream()
+                    .filter(s -> Long.parseLong(s.get("clock").toString()) >= from)
+                    .toList();
+        }
+
+        private static List<Map<String, Object>> samples(String id) {
+            return switch (id) {
+                case "1" -> List.of(sample(id, -60, "1000"), sample(id, 60, "1600"), sample(id, 120, "100"),
+                        sample(id, 180, "160"));
+                case "2" -> List.of(sample(id, 60, "10"), sample(id, 120, "20"));
+                default -> List.of();
+            };
+        }
+
+        private static Map<String, Object> sample(String id, int offset, String value) {
+            return Map.of("itemid", id, "clock", String.valueOf(T0.getEpochSecond() + offset), "ns", "0",
+                    "value", value);
+        }
+
+        private static Map<String, Object> item(String id, String key, String units, List<String> steps,
+                                                boolean withSteps) {
+            Map<String, Object> item = new java.util.HashMap<>(Map.of("itemid", id, "key_", key, "units", units,
+                    "value_type", "3", "hosts", List.of(Map.of("host", "router-1"))));
+            if (withSteps) {
+                item.put("preprocessing", steps.stream().map(t -> Map.of("type", t)).toList());
+            }
+            return item;
+        }
+    }
+
+    private final ZabbixProperties counterProps = new ZabbixProperties(true, null, "http://localhost:9", null, null,
+            null, null, false, null, null, null, 1, null, List.of("net.if.in", "net.if.out"));
+
+    private MetricSeries series(String metric, String instance) {
+        return new ZabbixAdapter(counterProps, new CounterClient(counterProps), Clock.systemUTC())
+                .metrics(WINDOW, QueryFilter.NONE).items().stream()
+                .filter(s -> s.metric().equals(metric) && s.instance().equals(instance))
+                .findFirst().orElseThrow();
+    }
+
+    @Test
+    void listedCounterBecomesRateUsingSampleBeforeWindowAndDroppingReset() {
+        MetricSeries s = series("net_if_in", "eth0");
+
+        assertThat(s.value()).isEqualTo(3.0);
+        assertThat(s.min()).isEqualTo(1.0);
+        assertThat(s.max()).isEqualTo(5.0);
+        assertThat(s.samples()).isEqualTo(2);
+        assertThat(s.unit()).isEqualTo("bytes_per_second");
+    }
+
+    @Test
+    void counterWithoutUnitIsPerSecond() {
+        assertThat(series("net_if_in", "eth1").unit()).isEqualTo("per_second");
+    }
+
+    @Test
+    void listedItemWithChangePerSecondStaysGauge() {
+        MetricSeries s = series("net_if_out", "eth0");
+
+        assertThat(s.value()).isEqualTo(15.0);
+        assertThat(s.samples()).isEqualTo(2);
+        assertThat(s.unit()).isEqualTo("bytes_per_second");
+    }
+
+    @Test
+    void listedItemWithSimpleChangeStaysGauge() {
+        assertThat(series("net_if_out", "eth1").unit()).isEqualTo("none");
+    }
+
+    @Test
+    void itemNotListedStaysGauge() {
+        assertThat(series("system_cpu_load", "").unit()).isEqualTo("none");
+    }
 
     @Test
     void connectionFailureStopsReadingBatches() {
@@ -83,7 +178,7 @@ class ZabbixAdapterTest {
     void itemKeyBecomesMetricAndInstance() {
         ZabbixAdapter.Item item = ZabbixAdapter.toItem(Map.of(
                 "itemid", "23296", "key_", "system.cpu.util[,user]", "units", "%", "value_type", "0",
-                "name", "CPU user time", "hosts", List.of(Map.of("hostid", "10084", "host", "srv-db-01"))));
+                "name", "CPU user time", "hosts", List.of(Map.of("hostid", "10084", "host", "srv-db-01"))), List.of());
         assertThat(item.metric()).isEqualTo("system_cpu_util");
         assertThat(item.instance()).isEqualTo(",user");
         assertThat(item.unit()).isEqualTo("percent");

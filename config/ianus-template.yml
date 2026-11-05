@@ -76,3 +76,6 @@ ianus:
       auth-mode: header
       history-depth: P7D
       # host-group-ids: ["2", "4"]
+      # Item contatore (chiavi senza parametri): il plugin ne calcola il tasso al secondo.
+      # Un contatore non elencato qui e senza preprocessing "change per second" esce con il valore grezzo.
+      # counter-keys: [net.if.in, net.if.out]

@@ -13,6 +13,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param authMode     header (Authorization: Bearer, Zabbix 6.4+) oppure param (campo auth, versioni precedenti)
  * @param hostGroupIds gruppi di host da esporre; vuoto = tutti gli host monitorati
  * @param maxEvents    eventi massimi letti per finestra
+ * @param counterKeys  chiavi (senza parametri) degli item contatore: se non hanno gia' un preprocessing
+ *                     di variazione, il plugin ne calcola il tasso al secondo
  */
 @ConfigurationProperties("ianus.sources.zabbix")
 public record ZabbixProperties(
@@ -28,7 +30,8 @@ public record ZabbixProperties(
         List<String> hostGroupIds,
         Duration discoveryRefresh,
         Integer batchSize,
-        Integer maxEvents) {
+        Integer maxEvents,
+        List<String> counterKeys) {
 
     public ZabbixProperties {
         id = id == null ? "zabbix" : id;
@@ -40,5 +43,6 @@ public record ZabbixProperties(
         discoveryRefresh = discoveryRefresh == null ? Duration.ofHours(1) : discoveryRefresh;
         batchSize = batchSize == null ? 500 : batchSize;
         maxEvents = maxEvents == null ? 10_000 : maxEvents;
+        counterKeys = counterKeys == null ? List.of() : List.copyOf(counterKeys);
     }
 }

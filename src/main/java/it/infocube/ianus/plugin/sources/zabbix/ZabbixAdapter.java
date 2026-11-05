@@ -13,6 +13,7 @@ import java.util.TreeSet;
 
 import it.infocube.ianus.plugin.core.aggregation.Aggregator;
 import it.infocube.ianus.plugin.core.aggregation.EventAggregator;
+import it.infocube.ianus.plugin.core.aggregation.MetricKind;
 import it.infocube.ianus.plugin.core.aggregation.Sample;
 import it.infocube.ianus.plugin.core.error.SourceUnavailableException;
 import it.infocube.ianus.plugin.core.model.EventGroup;
@@ -38,8 +39,9 @@ import org.springframework.web.client.RestClientException;
 
 /**
  * Plugin Zabbix. Metriche: item numerici (value_type 0 float, 3 intero) letti con history.get
- * nella finestra. Gli item con preprocessing "change per second" sono gia' tassi, quindi si
- * aggregano come gauge. Eventi: event.get sui trigger (problemi e risoluzioni).
+ * nella finestra. Zabbix non distingue i contatori: quelli elencati in counter-keys diventano tassi,
+ * a meno che un preprocessing "simple change" o "change per second" abbia gia' calcolato la variazione.
+ * Eventi: event.get sui trigger (problemi e risoluzioni).
  */
 @Component
 @ConditionalOnProperty(prefix = "ianus.sources.zabbix", name = "enabled", havingValue = "true")
@@ -47,9 +49,10 @@ public class ZabbixAdapter implements SourceAdapter {
 
     private static final Logger LOG = LoggerFactory.getLogger(ZabbixAdapter.class);
     static final String[] SEVERITIES = {"Not classified", "Information", "Warning", "Average", "High", "Disaster"};
+    private static final Set<String> CHANGE_STEPS = Set.of("9", "10");
 
     record Item(String itemId, String node, String metric, String instance, String unit, int valueType,
-                String name) {
+                String name, MetricKind kind) {
     }
 
     record Inventory(List<Item> items, Instant loadedAt) {
@@ -93,23 +96,29 @@ public class ZabbixAdapter implements SourceAdapter {
         RuntimeException last = null;
         batches:
         for (int valueType : new int[] {0, 3}) {
-            List<String> ids = items.stream().filter(i -> i.valueType() == valueType).map(Item::itemId).toList();
-            for (int from = 0; from < ids.size(); from += props.batchSize()) {
-                List<String> chunk = ids.subList(from, Math.min(from + props.batchSize(), ids.size()));
-                calls++;
-                try {
-                    history(valueType, chunk, window, samples);
-                } catch (ResourceAccessException e) {
-                    failures++;
-                    last = e;
-                    complete = false;
-                    LOG.warn("Zabbix history.get: Zabbix non raggiungibile, lettura interrotta: {}", e.getMessage());
-                    break batches;
-                } catch (RestClientException | ZabbixException e) {
-                    failures++;
-                    last = e;
-                    complete = false;
-                    LOG.warn("Zabbix history.get: lotto di {} item non letto: {}", chunk.size(), e.getMessage());
+            for (MetricKind kind : MetricKind.values()) {
+                List<String> ids = items.stream().filter(i -> i.valueType() == valueType && i.kind() == kind)
+                        .map(Item::itemId).toList();
+                // per i contatori serve anche il campione precedente alla finestra
+                Instant timeFrom = kind == MetricKind.COUNTER ? window.start().minus(window.duration()) : window.start();
+                for (int from = 0; from < ids.size(); from += props.batchSize()) {
+                    List<String> chunk = ids.subList(from, Math.min(from + props.batchSize(), ids.size()));
+                    calls++;
+                    try {
+                        history(valueType, chunk, timeFrom, window, samples);
+                    } catch (ResourceAccessException e) {
+                        failures++;
+                        last = e;
+                        complete = false;
+                        LOG.warn("Zabbix history.get: Zabbix non raggiungibile, lettura interrotta: {}",
+                                e.getMessage());
+                        break batches;
+                    } catch (RestClientException | ZabbixException e) {
+                        failures++;
+                        last = e;
+                        complete = false;
+                        LOG.warn("Zabbix history.get: lotto di {} item non letto: {}", chunk.size(), e.getMessage());
+                    }
                 }
             }
         }
@@ -118,18 +127,19 @@ public class ZabbixAdapter implements SourceAdapter {
         }
         List<MetricSeries> out = items.stream()
                 .map(i -> MetricSeries.of(i.node(), i.metric(), i.instance(), i.unit(),
-                        Aggregator.gauge(samples.getOrDefault(i.itemId(), List.of()), window),
+                        Aggregator.of(i.kind(), samples.getOrDefault(i.itemId(), List.of()), window),
                         Map.of("item", i.name() == null ? "" : i.name())))
                 .toList();
         return new SourceResult<>(out, complete);
     }
 
-    private void history(int valueType, List<String> itemIds, TimeWindow window, Map<String, List<Sample>> target) {
+    private void history(int valueType, List<String> itemIds, Instant timeFrom, TimeWindow window,
+                         Map<String, List<Sample>> target) {
         Map<String, Object> params = new LinkedHashMap<>();
         params.put("output", "extend");
         params.put("history", valueType);
         params.put("itemids", itemIds);
-        params.put("time_from", window.start().getEpochSecond());
+        params.put("time_from", timeFrom.getEpochSecond());
         params.put("time_till", window.end().getEpochSecond() - 1);
         params.put("sortfield", "clock");
         params.put("sortorder", "ASC");
@@ -242,6 +252,7 @@ public class ZabbixAdapter implements SourceAdapter {
         Map<String, Object> params = new LinkedHashMap<>();
         params.put("output", List.of("itemid", "name", "key_", "units", "value_type"));
         params.put("selectHosts", List.of("hostid", "host"));
+        params.put("selectPreprocessing", List.of("type"));
         params.put("monitored", true);
         params.put("filter", Map.of("value_type", List.of(0, 3)));
         if (!props.hostGroupIds().isEmpty()) {
@@ -249,7 +260,7 @@ public class ZabbixAdapter implements SourceAdapter {
         }
         List<Item> items = new ArrayList<>();
         for (Map<String, Object> it : Json.maps(client.call("item.get", params, true))) {
-            Item item = toItem(it);
+            Item item = toItem(it, props.counterKeys());
             if (item != null) {
                 items.add(item);
             }
@@ -258,7 +269,7 @@ public class ZabbixAdapter implements SourceAdapter {
         return List.copyOf(items);
     }
 
-    static Item toItem(Map<String, Object> it) {
+    static Item toItem(Map<String, Object> it, List<String> counterKeys) {
         String id = Json.str(it.get("itemid"));
         String key = Json.str(it.get("key_"));
         Double vt = Json.num(it.get("value_type"));
@@ -268,8 +279,18 @@ public class ZabbixAdapter implements SourceAdapter {
         List<Map<String, Object>> hosts = Json.maps(it.get("hosts"));
         String host = hosts.isEmpty() ? "" : Json.str(hosts.get(0).get("host"), "");
         String[] parts = splitKey(key);
-        return new Item(id, host, Names.snake(parts[0]), parts[1], unit(Json.str(it.get("units"), "")),
-                vt.intValue(), Json.str(it.get("name")));
+        boolean counter = counterKeys.contains(parts[0]) && !hasChangeStep(it);
+        String unit = unit(Json.str(it.get("units"), ""));
+        return new Item(id, host, Names.snake(parts[0]), parts[1], counter ? rateUnit(unit) : unit,
+                vt.intValue(), Json.str(it.get("name")), counter ? MetricKind.COUNTER : MetricKind.GAUGE);
+    }
+
+    private static boolean hasChangeStep(Map<String, Object> it) {
+        return Json.maps(it.get("preprocessing")).stream().anyMatch(p -> CHANGE_STEPS.contains(Json.str(p.get("type"))));
+    }
+
+    private static String rateUnit(String unit) {
+        return "none".equals(unit) ? "per_second" : unit + "_per_second";
     }
 
     /** system.cpu.util[,user] -> {"system.cpu.util", ",user"}. */
