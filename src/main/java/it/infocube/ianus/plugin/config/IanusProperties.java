@@ -15,6 +15,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param maxPageSize     dimensione massima di pagina
  * @param cacheTtl        durata della cache delle risposte complete (PT0S per disattivarla)
  * @param cacheMaxEntries numero massimo di risposte in cache
+ * @param retention       storia conservata in memoria dai Collector
  */
 @ConfigurationProperties("ianus")
 public record IanusProperties(
@@ -24,7 +25,8 @@ public record IanusProperties(
         Integer defaultPageSize,
         Integer maxPageSize,
         Duration cacheTtl,
-        Integer cacheMaxEntries) {
+        Integer cacheMaxEntries,
+        Duration retention) {
 
     public IanusProperties {
         pluginVersion = pluginVersion == null ? "2.0.0" : pluginVersion;
@@ -35,5 +37,6 @@ public record IanusProperties(
         maxPageSize = maxPageSize == null ? 5000 : maxPageSize;
         cacheTtl = cacheTtl == null ? Duration.ofMinutes(10) : cacheTtl;
         cacheMaxEntries = cacheMaxEntries == null ? 200 : cacheMaxEntries;
+        retention = retention == null ? Duration.ofHours(3) : retention;
     }
 }

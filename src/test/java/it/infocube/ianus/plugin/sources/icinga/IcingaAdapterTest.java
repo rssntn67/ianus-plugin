@@ -11,6 +11,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 
+import it.infocube.ianus.plugin.config.IanusProperties;
 import it.infocube.ianus.plugin.core.error.SourceUnavailableException;
 import it.infocube.ianus.plugin.core.model.MetricSeries;
 import it.infocube.ianus.plugin.core.source.QueryFilter;
@@ -162,6 +163,14 @@ class IcingaAdapterTest {
         pollAt(1, true);
 
         assertThat(adapter.metrics(window(-5), QueryFilter.NONE).complete()).isFalse();
+    }
+
+    @Test
+    void retentionShorterThanGlobalOneRefusesToStart() {
+        IanusProperties global = new IanusProperties("k", null, null, null, null, null, null, Duration.ofHours(3));
+
+        assertThatThrownBy(() -> new IcingaAdapter(props, global, clock))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("retention");
     }
 
     @Test

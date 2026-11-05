@@ -38,7 +38,7 @@ import org.springframework.boot.test.system.OutputCaptureExtension;
 class IanusServiceTest {
 
     private final Clock clock = Clock.fixed(Instant.parse("2026-10-14T10:07:30Z"), ZoneOffset.UTC);
-    private final IanusProperties props = new IanusProperties("k", null, null, 2, 10, Duration.ZERO, null);
+    private final IanusProperties props = new IanusProperties("k", null, null, 2, 10, Duration.ZERO, null, null);
     private final FakeAdapter adapter = new FakeAdapter();
     private final IanusService service = new IanusService(provider(adapter),
             new WindowResolver(props.windows(), clock), new ResultCache(Duration.ZERO, 10, clock), props);

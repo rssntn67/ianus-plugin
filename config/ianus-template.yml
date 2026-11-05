@@ -18,10 +18,16 @@ ianus:
   default-page-size: 500
   max-page-size: 5000
   cache-ttl: PT10M
+  # Storia conservata in memoria: le finestre piu' vecchie non si possono chiedere
+  retention: PT3H
 
   sources:
     opennms:
       enabled: false
+      # Ampiezza dei blocchi e frequenza di raccolta: deve dividere ogni finestra supportata
+      collect-interval: PT5M
+      # Attesa dopo la fine del blocco, perche' l'NMS abbia i dati
+      collect-delay: PT1M
       id: opennms-01
       url: http://localhost:8980/opennms
       username: ${OPENNMS_USER:admin}
@@ -37,6 +43,10 @@ ianus:
 
     prometheus:
       enabled: false
+      # Ampiezza dei blocchi e frequenza di raccolta: deve dividere ogni finestra supportata
+      collect-interval: PT5M
+      # Attesa dopo la fine del blocco, perche' l'NMS abbia i dati
+      collect-delay: PT1M
       id: prometheus-01
       url: http://localhost:9090
       node-label: instance
@@ -60,6 +70,10 @@ ianus:
 
     icinga:
       enabled: false
+      # Ampiezza dei blocchi e frequenza di raccolta: deve dividere ogni finestra supportata
+      collect-interval: PT5M
+      # Attesa dopo la fine del blocco, perche' l'NMS abbia i dati
+      collect-delay: PT1M
       id: icinga-01
       url: https://localhost:5665
       username: ${ICINGA_USER:ianus}
@@ -70,6 +84,10 @@ ianus:
 
     zabbix:
       enabled: false
+      # Ampiezza dei blocchi e frequenza di raccolta: deve dividere ogni finestra supportata
+      collect-interval: PT5M
+      # Attesa dopo la fine del blocco, perche' l'NMS abbia i dati
+      collect-delay: PT1M
       id: zabbix-01
       url: http://localhost/zabbix/api_jsonrpc.php
       token: ${ZABBIX_TOKEN:}

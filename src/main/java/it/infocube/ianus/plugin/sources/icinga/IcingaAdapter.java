@@ -8,6 +8,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Stream;
 
+import it.infocube.ianus.plugin.config.IanusProperties;
 import it.infocube.ianus.plugin.core.aggregation.EventAggregator;
 import it.infocube.ianus.plugin.core.aggregation.Sample;
 import it.infocube.ianus.plugin.core.buffer.EventBuffer;
@@ -77,8 +78,17 @@ public class IcingaAdapter implements SourceAdapter {
     private volatile Instant outageStart;
 
     @Autowired
-    public IcingaAdapter(IcingaProperties props, Clock clock) {
-        this(props, new IcingaClient(props), clock);
+    public IcingaAdapter(IcingaProperties props, IanusProperties ianus, Clock clock) {
+        this(checked(props, ianus), new IcingaClient(props), clock);
+    }
+
+    /** Il Collector rilegge dal buffer: deve conservare almeno la storia del plugin. */
+    private static IcingaProperties checked(IcingaProperties props, IanusProperties ianus) {
+        if (props.retention().compareTo(ianus.retention()) < 0) {
+            throw new IllegalStateException("ianus.sources.icinga.retention (" + props.retention()
+                    + ") deve essere almeno pari a ianus.retention (" + ianus.retention() + ")");
+        }
+        return props;
     }
 
     IcingaAdapter(IcingaProperties props, IcingaClient client, Clock clock) {

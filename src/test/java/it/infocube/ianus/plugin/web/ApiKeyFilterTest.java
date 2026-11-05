@@ -11,7 +11,7 @@ import org.springframework.mock.web.MockHttpServletResponse;
 
 class ApiKeyFilterTest {
 
-    private final ApiKeyFilter filter = new ApiKeyFilter(new IanusProperties("secret", null, null, null, null, null, null));
+    private final ApiKeyFilter filter = new ApiKeyFilter(new IanusProperties("secret", null, null, null, null, null, null, null));
 
     @Test
     void acceptsValidKey() throws Exception {
@@ -46,7 +46,7 @@ class ApiKeyFilterTest {
 
     @Test
     void refusesToStartWithoutKey() {
-        assertThatThrownBy(() -> new ApiKeyFilter(new IanusProperties(" ", null, null, null, null, null, null)))
+        assertThatThrownBy(() -> new ApiKeyFilter(new IanusProperties(" ", null, null, null, null, null, null, null)))
                 .isInstanceOf(IllegalStateException.class);
     }
 }
