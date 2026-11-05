@@ -41,7 +41,7 @@ flowchart TB
     CLIENT --> SYSLOG["Syslog/NiFi/ES"]
 ```
 
-Verso l'NMS il plugin usa le API del sistema. Per le sorgenti che inviano dati al plugin (Syslog, trap SNMP) il plugin conserva quanto riceve per tutta la profondità storica dichiarata (sezione 8), così da poter rispondere su qualunque finestra. OpenNMS e Prometheus sono già realizzati (SAL4); Zabbix, Nagios Core/Icinga 2 e Syslog/NiFi/Elasticsearch sono da realizzare.
+Verso l'NMS il plugin usa le API del sistema. Per le sorgenti che inviano dati al plugin (Syslog, trap SNMP) il plugin conserva quanto riceve per tutta la profondità storica dichiarata (sezione 8), così da poter rispondere su qualunque finestra. OpenNMS, Prometheus, Zabbix e Icinga 2 sono realizzati; Nagios Core e Syslog/NiFi/Elasticsearch sono da realizzare.
 
 ## 3. Richiesta dei dati: finestra temporale e aggregazione
 
@@ -255,15 +255,15 @@ La scheda OR8 chiede plugin resilienti e tolleranti alla perdita di connessione.
 - **Idempotenza.** La stessa richiesta (sorgente, finestra, filtri) restituisce sempre lo stesso risultato, salvo dati arrivati in ritardo all'NMS.
 - **Tempo.** Plugin e NMS devono essere sincronizzati via NTP. Il plugin converte in UTC ogni istante ricevuto dall'NMS.
 - **Chiamate verso l'NMS.** Timeout configurabile, nuovi tentativi con attesa crescente, nessun blocco dell'intero plugin se un NMS non risponde.
-- **Cache.** Il Collector schedulato con cache in memoria, già presente nel codice, può restare per le finestre recenti. Non sostituisce la capacità di servire una finestra passata su richiesta.
+- **Cache.** Il plugin può conservare in memoria, per un tempo limitato, le risposte complete delle finestre recenti. La cache si riempie alle richieste di IANUS, senza raccolta schedulata, e non sostituisce la capacità di servire una finestra passata su richiesta.
 - **Sicurezza.** IANUS si autentica verso il plugin con una API key inviata nell'header HTTP X-API-Key; senza chiave o con chiave non valida il plugin risponde 401. Ogni installazione ha la propria chiave, sostituibile senza modificare il codice. Le credenziali verso l'NMS stanno nella configurazione o in un secret dell'orchestratore, mai nel codice.
-- **Configurazione.** Per ogni sorgente: URL, credenziali, timeout, finestre supportate, filtri di default. In Spring Boot è una classe `@ConfigurationProperties`, come già avviene per OpenNMS e Prometheus.
+- **Configurazione.** Per ogni sorgente: URL, credenziali, timeout, finestre supportate, filtri di default. In Spring Boot è una classe `@ConfigurationProperties`. Il plugin si avvia solo con un file di configurazione esterno, indicato all'avvio: senza file non parte, e quello distribuito con il codice è solo un template.
 - **Osservabilità.** Il plugin registra richieste, tempi di risposta dell'NMS, errori e severità non mappate; `/ianus/v2/health` riporta lo stato di ogni sorgente.
 - **Distribuzione.** Ogni plugin è un microservizio containerizzato, distribuibile sull'orchestratore Kubernetes predisposto in A8.1.
 
 ## 9. Come sviluppare un nuovo plugin
 
-Un nuovo plugin (Zabbix, Nagios/Icinga 2, Syslog/NiFi/Elasticsearch) replica il pattern a quattro livelli di IANUS Plugin e aggiunge i due componenti richiesti dalla versione 2.0: l'aggregatore e la mappatura delle severità.
+Un nuovo plugin (per esempio Nagios Core o Syslog/NiFi/Elasticsearch) replica il pattern a quattro livelli di IANUS Plugin e aggiunge i due componenti richiesti dalla versione 2.0: l'aggregatore e la mappatura delle severità.
 
 1. **Properties.** Classe `@ConfigurationProperties` con URL, credenziali, timeout e finestre supportate della sorgente.
 2. **Client Config.** Bean `RestClient` con base URL, autenticazione e timeout.
