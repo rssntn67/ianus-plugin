@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeSet;
+import java.util.function.Supplier;
 
 import it.infocube.ianus.plugin.config.IanusProperties;
 import it.infocube.ianus.plugin.core.error.BadRequestException;
@@ -27,12 +28,16 @@ import it.infocube.ianus.plugin.core.source.SourceCapabilities;
 import it.infocube.ianus.plugin.core.source.SourceResult;
 import it.infocube.ianus.plugin.core.window.TimeWindow;
 import it.infocube.ianus.plugin.core.window.WindowResolver;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 /** Logica comune a tutte le sorgenti: finestra, filtri, cache, paginazione, busta della risposta. */
 @Service
 public class IanusService {
+
+    private static final Logger LOG = LoggerFactory.getLogger(IanusService.class);
 
     static final Comparator<MetricSeries> METRIC_ORDER = Comparator.comparing(MetricSeries::node)
             .thenComparing(MetricSeries::metric)
@@ -61,7 +66,7 @@ public class IanusService {
         QueryFilter filter = QueryFilter.of(nodes, metrics);
         Paging paging = paging(page, size);
         SourceResult<MetricSeries> result = cache.get(key("metrics", adapter, w, filter),
-                () -> adapter.metrics(w, filter), SourceResult::complete);
+                () -> timed(adapter, "metrics", () -> adapter.metrics(w, filter)), SourceResult::complete);
         List<MetricSeries> items = result.items().stream()
                 .filter(s -> filter.nodeMatches(s.node()) && filter.metricMatches(s.metric()))
                 .sorted(METRIC_ORDER)
@@ -77,7 +82,7 @@ public class IanusService {
         QueryFilter filter = QueryFilter.of(nodes, null);
         Paging paging = paging(page, size);
         SourceResult<EventGroup> result = cache.get(key("events", adapter, w, filter),
-                () -> adapter.events(w, filter), SourceResult::complete);
+                () -> timed(adapter, "events", () -> adapter.events(w, filter)), SourceResult::complete);
         List<EventGroup> items = result.items().stream()
                 .filter(e -> filter.nodeMatches(e.node()))
                 .sorted(Comparator.comparing(EventGroup::node).thenComparing(EventGroup::eventId)
@@ -108,6 +113,15 @@ public class IanusService {
         }
         boolean allUp = sources.stream().allMatch(SourceHealth::reachable);
         return new HealthResponse(allUp ? "UP" : "DEGRADED", properties.pluginVersion(), sources);
+    }
+
+    /** Tempo di risposta dell'NMS (sezione 8): solo sulle letture reali, non su quelle dalla cache. */
+    private static <T> SourceResult<T> timed(SourceAdapter adapter, String kind, Supplier<SourceResult<T>> call) {
+        long start = System.nanoTime();
+        SourceResult<T> result = call.get();
+        LOG.info("{}: {} letti in {} ms ({} elementi, complete={})", adapter.system(), kind,
+                (System.nanoTime() - start) / 1_000_000, result.items().size(), result.complete());
+        return result;
     }
 
     private SourceAdapter adapter(String source) {

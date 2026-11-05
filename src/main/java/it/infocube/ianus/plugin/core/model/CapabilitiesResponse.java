@@ -5,9 +5,9 @@ import java.util.List;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 public record CapabilitiesResponse(
-        SourceInfo source,
-        List<String> windows,
-        List<String> metrics,
-        List<String> nodes,
-        @JsonProperty("history_depth") String historyDepth) {
+        @JsonProperty(required = true) SourceInfo source,
+        @JsonProperty(required = true) List<String> windows,
+        @JsonProperty(required = true) List<String> metrics,
+        @JsonProperty(required = true) List<String> nodes,
+        @JsonProperty(value = "history_depth", required = true) String historyDepth) {
 }

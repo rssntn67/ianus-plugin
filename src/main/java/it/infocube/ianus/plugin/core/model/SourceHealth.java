@@ -1,4 +1,10 @@
 package it.infocube.ianus.plugin.core.model;
 
-public record SourceHealth(String system, String id, boolean reachable, String message) {
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+public record SourceHealth(
+        @JsonProperty(required = true) String system,
+        @JsonProperty(required = true) String id,
+        @JsonProperty(required = true) boolean reachable,
+        String message) {
 }

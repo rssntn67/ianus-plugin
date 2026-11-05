@@ -9,14 +9,14 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 /** Gruppo di eventi della finestra (sezione 5). */
 public record EventGroup(
-        String node,
-        @JsonProperty("event_id") String eventId,
-        String instance,
-        Severity severity,
-        @JsonProperty("native_severity") String nativeSeverity,
-        long count,
-        @JsonProperty("first_seen") String firstSeen,
-        @JsonProperty("last_seen") String lastSeen,
+        @JsonProperty(required = true) String node,
+        @JsonProperty(value = "event_id", required = true) String eventId,
+        @JsonProperty(required = true) String instance,
+        @JsonProperty(required = true) Severity severity,
+        @JsonProperty(value = "native_severity", required = true) String nativeSeverity,
+        @JsonProperty(required = true) long count,
+        @JsonProperty(value = "first_seen", required = true) String firstSeen,
+        @JsonProperty(value = "last_seen", required = true) String lastSeen,
         @JsonInclude(JsonInclude.Include.NON_NULL) String message,
         @JsonInclude(JsonInclude.Include.NON_EMPTY) Map<String, String> labels) {
 

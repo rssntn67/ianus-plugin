@@ -2,5 +2,8 @@ package it.infocube.ianus.plugin.core.model;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
-public record PageInfo(int number, int size, @JsonProperty("total_elements") long totalElements) {
+public record PageInfo(
+        @JsonProperty(required = true) int number,
+        @JsonProperty(required = true) int size,
+        @JsonProperty(value = "total_elements", required = true) long totalElements) {
 }

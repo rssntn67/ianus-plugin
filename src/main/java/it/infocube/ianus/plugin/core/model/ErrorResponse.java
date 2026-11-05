@@ -1,4 +1,8 @@
 package it.infocube.ianus.plugin.core.model;
 
-public record ErrorResponse(String code, String message) {
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+public record ErrorResponse(
+        @JsonProperty(required = true) String code,
+        @JsonProperty(required = true) String message) {
 }

@@ -5,6 +5,8 @@ import java.util.Map;
 import java.util.TreeMap;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 import it.infocube.ianus.plugin.core.aggregation.Stats;
 
 /**
@@ -12,14 +14,14 @@ import it.infocube.ianus.plugin.core.aggregation.Stats;
  * value = media, min/max = estremi; null con samples = 0 se non ci sono campioni.
  */
 public record MetricSeries(
-        String node,
-        String metric,
-        String instance,
-        String unit,
-        Double value,
-        Double min,
-        Double max,
-        long samples,
+        @JsonProperty(required = true) String node,
+        @JsonProperty(required = true) String metric,
+        @JsonProperty(required = true) String instance,
+        @JsonProperty(required = true) String unit,
+        @JsonProperty(required = true) @Schema(types = {"number", "null"}) Double value,
+        @JsonProperty(required = true) @Schema(types = {"number", "null"}) Double min,
+        @JsonProperty(required = true) @Schema(types = {"number", "null"}) Double max,
+        @JsonProperty(required = true) long samples,
         @JsonInclude(JsonInclude.Include.NON_EMPTY) Map<String, String> labels) {
 
     public MetricSeries {

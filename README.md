@@ -84,6 +84,9 @@ curl -H "X-API-Key: $IANUS_API_KEY" \
   "http://localhost:8080/ianus/v2/zabbix/events?window=PT30M&end=2026-10-14T10:00:00Z"
 ```
 
+Ogni richiesta a `/ianus/**` viene registrata nel log con esito e durata, e ogni lettura da un NMS con il
+suo tempo di risposta; le risposte dalla cache non interrogano l'NMS e non compaiono.
+
 Errori: `400` finestra non supportata / `end` non allineato o futuro / paginazione errata,
 `401` API key assente o errata, `404` sorgente non configurata, `503` NMS non raggiungibile.
 Il corpo contiene sempre `code` e `message`. `complete: false` indica una risposta parziale.

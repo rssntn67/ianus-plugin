@@ -28,9 +28,13 @@ import it.infocube.ianus.plugin.core.source.SourceResult;
 import it.infocube.ianus.plugin.core.window.TimeWindow;
 import it.infocube.ianus.plugin.core.window.WindowResolver;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.support.DefaultListableBeanFactory;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 
+@ExtendWith(OutputCaptureExtension.class)
 class IanusServiceTest {
 
     private final Clock clock = Clock.fixed(Instant.parse("2026-10-14T10:07:30Z"), ZoneOffset.UTC);
@@ -54,6 +58,17 @@ class IanusServiceTest {
 
         MetricsResponse filtered = service.metrics("fake", "PT5M", null, List.of("b"), null, null, null);
         assertThat(filtered.metrics()).extracting(MetricSeries::node).containsOnly("b");
+    }
+
+    @Test
+    void nmsCallIsLoggedWithDurationOnlyOnCacheMiss(CapturedOutput output) {
+        IanusService cached = new IanusService(provider(adapter), new WindowResolver(props.windows(), clock),
+                new ResultCache(Duration.ofMinutes(10), 10, clock), props);
+
+        cached.metrics("fake", "PT5M", null, null, null, null, null);
+        cached.metrics("fake", "PT5M", null, null, null, null, null);
+
+        assertThat(output.getOut()).containsOnlyOnce("fake: metrics letti in ").containsPattern("in \\d+ ms");
     }
 
     @Test

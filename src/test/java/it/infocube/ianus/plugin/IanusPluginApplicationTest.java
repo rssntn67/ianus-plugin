@@ -10,9 +10,16 @@ import java.util.List;
 
 import it.infocube.ianus.plugin.core.source.SourceAdapter;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Avvio completo del contesto con tutte le sorgenti abilitate e NMS irraggiungibili:
@@ -24,13 +31,17 @@ import org.springframework.boot.test.web.server.LocalServerPort;
         "ianus.sources.opennms.url=http://127.0.0.1:1/opennms",
         "ianus.sources.prometheus.enabled=true",
         "ianus.sources.prometheus.url=http://127.0.0.1:1",
+        "ianus.sources.prometheus.metrics[0].name=cpu_usage",
         "ianus.sources.icinga.enabled=true",
         "ianus.sources.icinga.url=https://127.0.0.1:1",
         "ianus.sources.icinga.poll-interval=PT1H",
         "ianus.sources.zabbix.enabled=true",
         "ianus.sources.zabbix.url=http://127.0.0.1:1/api_jsonrpc.php"
 })
+@ExtendWith(OutputCaptureExtension.class)
 class IanusPluginApplicationTest {
+
+    private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private final HttpClient http = HttpClient.newHttpClient();
 
@@ -79,6 +90,99 @@ class IanusPluginApplicationTest {
         assertThat(res.statusCode()).isEqualTo(200);
         assertThat(res.body()).contains("/ianus/v2/{source}/metrics", "/ianus/v2/{source}/events",
                 "/ianus/v2/{source}/capabilities", "/ianus/v2/health");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"opennms", "prometheus", "icinga", "zabbix"})
+    void unreachableNmsIs503(String source) throws Exception {
+        for (String endpoint : List.of("metrics", "events")) {
+            HttpResponse<String> res = get("/ianus/v2/" + source + "/" + endpoint + "?window=PT5M", "test-key");
+
+            assertThat(res.statusCode()).isEqualTo(503);
+            assertThat(JSON.readTree(res.body()).path("code").asString()).isEqualTo("source_unavailable");
+        }
+    }
+
+    @Test
+    void requestsAreLoggedWithStatusAndWithoutApiKey(CapturedOutput output) throws Exception {
+        get("/ianus/v2/health?prova=1", "chiave-sbagliata");
+        get("/v3/api-docs", null);
+
+        assertThat(output.getOut()).containsPattern("GET /ianus/v2/health\\?prova=1 -> 401 in \\d+ ms")
+                .doesNotContain("chiave-sbagliata").doesNotContain("GET /v3/api-docs");
+    }
+
+    @Test
+    void unknownPathHasContractErrorBody() throws Exception {
+        HttpResponse<String> res = get("/ianus/v2/opennms/inesistente", "test-key");
+
+        assertThat(res.statusCode()).isEqualTo(404);
+        JsonNode body = JSON.readTree(res.body());
+        assertThat(body.path("code").asString()).isEqualTo("not_found");
+        assertThat(body.path("message").asString()).isNotBlank();
+    }
+
+    @Test
+    void wrongMethodHasContractErrorBody() throws Exception {
+        HttpRequest req = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/ianus/v2/health"))
+                .header("X-API-Key", "test-key").POST(HttpRequest.BodyPublishers.noBody()).build();
+        HttpResponse<String> res = http.send(req, HttpResponse.BodyHandlers.ofString());
+
+        assertThat(res.statusCode()).isEqualTo(405);
+        JsonNode body = JSON.readTree(res.body());
+        assertThat(body.path("code").asString()).isEqualTo("method_not_allowed");
+        assertThat(body.path("message").asString()).isNotBlank();
+    }
+
+    @Test
+    void openApiDeclaresWindowAsRequired() throws Exception {
+        JsonNode parameters = apiDocs().at("/paths/~1ianus~1v2~1{source}~1metrics/get/parameters");
+
+        assertThat(parameters.valueStream().filter(p -> p.path("name").asString().equals("window")).findFirst())
+                .hasValueSatisfying(p -> assertThat(p.path("required").asBoolean()).isTrue());
+    }
+
+    @Test
+    void openApiDocumentsErrorResponses() throws Exception {
+        JsonNode docs = apiDocs();
+
+        assertThat(docs.at("/paths/~1ianus~1v2~1{source}~1metrics/get/responses").propertyNames())
+                .contains("200", "400", "401", "404", "503");
+        assertThat(docs.at("/paths/~1ianus~1v2~1{source}~1events/get/responses").propertyNames())
+                .contains("200", "400", "401", "404", "503");
+        assertThat(docs.at("/paths/~1ianus~1v2~1{source}~1capabilities/get/responses").propertyNames())
+                .contains("200", "401", "404", "503");
+        assertThat(docs.at("/paths/~1ianus~1v2~1health/get/responses").propertyNames()).contains("200", "401");
+    }
+
+    @Test
+    void openApiDeclaresApiKeyOnEveryEndpoint() throws Exception {
+        JsonNode docs = apiDocs();
+
+        JsonNode scheme = docs.at("/components/securitySchemes/apiKey");
+        assertThat(scheme.path("type").asString()).isEqualTo("apiKey");
+        assertThat(scheme.path("in").asString()).isEqualTo("header");
+        assertThat(scheme.path("name").asString()).isEqualTo("X-API-Key");
+        for (String op : List.of("/paths/~1ianus~1v2~1{source}~1metrics/get", "/paths/~1ianus~1v2~1health/get")) {
+            assertThat(docs.at(op + "/security").toString()).contains("apiKey");
+        }
+    }
+
+    @Test
+    void openApiDeclaresRequiredFieldsAndNullableStats() throws Exception {
+        JsonNode series = apiDocs().at("/components/schemas/MetricSeries");
+
+        assertThat(series.path("required").valueStream().map(JsonNode::asString))
+                .containsExactlyInAnyOrder("node", "metric", "instance", "unit", "value", "min", "max", "samples");
+        assertThat(series.at("/properties/value/type").toString()).contains("null");
+
+        assertThat(apiDocs().at("/components/schemas/EventGroup/required").valueStream().map(JsonNode::asString))
+                .containsExactlyInAnyOrder("node", "event_id", "instance", "severity", "native_severity", "count",
+                        "first_seen", "last_seen");
+    }
+
+    private JsonNode apiDocs() throws Exception {
+        return JSON.readTree(get("/v3/api-docs", null).body());
     }
 
     private HttpResponse<String> get(String path, String apiKey) throws Exception {

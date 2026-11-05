@@ -1,5 +1,7 @@
 package it.infocube.ianus.plugin.web;
 
+import java.util.Locale;
+
 import it.infocube.ianus.plugin.core.error.IanusException;
 import it.infocube.ianus.plugin.core.model.ErrorResponse;
 import org.slf4j.Logger;
@@ -28,5 +30,19 @@ public class ApiExceptionHandler {
     public ResponseEntity<ErrorResponse> typeMismatch(MethodArgumentTypeMismatchException e) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new ErrorResponse("invalid_parameter", "Parametro non valido: " + e.getName()));
+    }
+
+    /** Errori di Spring MVC (percorso inesistente, metodo non ammesso) e imprevisti, sempre con code e message. */
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ErrorResponse> unexpected(Exception e) {
+        if (e instanceof org.springframework.web.ErrorResponse mvc) {
+            HttpStatus status = HttpStatus.valueOf(mvc.getStatusCode().value());
+            return ResponseEntity.status(status).headers(mvc.getHeaders())
+                    .body(new ErrorResponse(status.name().toLowerCase(Locale.ROOT),
+                            "Richiesta non gestita: " + status.getReasonPhrase()));
+        }
+        LOG.error("Errore imprevisto", e);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(new ErrorResponse("internal_error", "Errore interno del plugin"));
     }
 }
