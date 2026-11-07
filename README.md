@@ -9,7 +9,8 @@ Implementa il contratto descritto in [SPECIFICA.md](SPECIFICA.md) (*IANUS – Ar
 - severità normalizzate su **INFO / WARNING / ERROR / CRITICAL**, con la severità nativa conservata;
 - accesso protetto da **API key** nell'header `X-API-Key`.
 
-Sorgenti supportate: **OpenNMS**, **Prometheus**, **Icinga 2**, **Zabbix**.
+Sorgenti supportate: **OpenNMS**, **Prometheus**, **Icinga 2**, **Zabbix**. Syslog è realizzato in un plugin
+separato, soggetto allo stesso contratto.
 
 ## Requisiti
 
@@ -85,8 +86,8 @@ curl -H "X-API-Key: <api-key del file>" \
   "http://localhost:8080/ianus/v2/zabbix/events?window=PT30M&end=2026-10-14T10:00:00Z"
 ```
 
-Ogni richiesta a `/ianus/**` viene registrata nel log con esito e durata, e ogni lettura da un NMS con il
-suo tempo di risposta.
+Ogni richiesta a `/ianus/**` viene registrata nel log con esito e durata. Ogni blocco letto da un NMS viene
+registrato con durata della lettura, numero di elementi e `complete`.
 
 Errori: `400` finestra non supportata / `end` non allineato o futuro / finestra più vecchia della `retention`
 (`window_too_old`) / paginazione errata, `401` API key assente o errata, `404` sorgente non configurata,
@@ -138,8 +139,9 @@ contiene quanto letto fino a quel punto, con `complete: false`.
 ### OpenNMS
 - **Metriche**: Measurements API (`POST /rest/measurements`) sugli attributi dei grafici dei nodi
   selezionati (`nodes`, vuoto = tutti). Nodi, risorse e attributi sono riletti ogni `discovery-refresh`.
-- `sample-step` deve corrispondere all'intervallo di raccolta (default 5 minuti): così ogni punto letto
-  con aggregazione `AVERAGE` è in pratica un campione, e il plugin ne calcola media, minimo e massimo.
+- `sample-step` deve corrispondere all'intervallo con cui OpenNMS raccoglie i dati (default 5 minuti): così
+  ogni punto letto con aggregazione `AVERAGE` è in pratica un campione, e il plugin ne calcola media, minimo
+  e massimo.
 - `ianus.retention` non deve superare il periodo conservato a piena risoluzione: oltre, i punti recuperati
   sono già mediati su intervalli più lunghi e minimo e massimo perdono i picchi.
 - I DS di tipo COUNTER sono già restituiti come tassi da OpenNMS, quindi si aggregano come gauge.
@@ -155,18 +157,20 @@ contiene quanto letto fino a quel punto, con `complete: false`.
   campioni nel periodo `series-lookback` (default 1 ora) prima della fine della finestra; oltre quel
   periodo sparisce. Costa una query in più per metrica.
 - Le metriche esposte sono quelle elencate in `metrics` (nome IANUS, selettore, tipo, unità, etichette di istanza).
-- **Eventi**: serie `ALERTS{alertstate="firing"}` campionata ogni `alert-step`; ogni periodo di attivazione conta come un'occorrenza, anche se attraversa più blocchi.
+- **Eventi**: serie `ALERTS{alertstate="firing"}` campionata ogni `alert-step`; ogni periodo di attivazione conta
+  come un'occorrenza, anche se attraversa più blocchi.
 
 ### Icinga 2
 - L'API REST di Icinga restituisce solo l'ultimo risultato di ogni controllo. Il plugin interroga
-  `/v1/objects/hosts` e `/v1/objects/services` ogni `poll-interval` e conserva i campioni in memoria per `retention`.
+  `/v1/objects/hosts` e `/v1/objects/services` ogni `poll-interval` (default 30 secondi) e conserva i campioni in
+  memoria per `ianus.sources.icinga.retention` (default 24 ore).
 - **Metriche**: performance data dei controlli (`metric` = etichetta, `instance` = servizio),
   con conversione delle unità (ms → seconds, KB → bytes, `c` → contatore).
 - **Eventi**: cambi di stato di host e servizi (`last_state_change`).
 - Dopo un riavvio il buffer riparte vuoto: le finestre precedenti all'avvio risultano `complete: false`.
 - Se Icinga smette di rispondere, le finestre toccate dall'interruzione risultano `complete: false`;
   quelle interamente dentro l'interruzione rispondono `503`. Una sola interrogazione fallita basta a
-  segnalarlo. Le interruzioni più vecchie di `retention` non vengono più ricordate.
+  segnalarlo. Le interruzioni più vecchie della `retention` di Icinga non vengono più ricordate.
 - Utente API consigliato in Icinga (sola lettura):
   ```
   object ApiUser "ianus" {
