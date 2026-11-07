@@ -47,6 +47,7 @@ class ApiKeyFilterTest {
     @Test
     void refusesToStartWithoutKey() {
         assertThatThrownBy(() -> new ApiKeyFilter(new IanusProperties(" ", null, null, null, null, null)))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("ianus.api-key non configurata: impostarla nel file di configurazione esterno");
     }
 }

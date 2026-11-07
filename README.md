@@ -39,7 +39,8 @@ Il percorso del file si indica in uno di questi modi, in ordine di precedenza:
 | Percorso predefinito | `/etc/ianus/ianus.yml` |
 
 Nel file si possono usare riferimenti a variabili d'ambiente, come `${OPENNMS_PASSWORD:}` nel template.
-`ianus.api-key` è obbligatoria e le sorgenti si abilitano con `ianus.sources.<sorgente>.enabled: true`.
+`ianus.api-key` si scrive nel file ed è obbligatoria: se è vuota il plugin non si avvia.
+Le sorgenti si abilitano con `ianus.sources.<sorgente>.enabled: true`.
 I valori del file si possono sovrascrivere con variabili d'ambiente
 (`IANUS_SOURCES_OPENNMS_ENABLED=true`, `IANUS_SOURCES_OPENNMS_URL=...`).
 
@@ -77,10 +78,10 @@ Parametri: `window` (obbligatorio), `end` (RFC 3339 UTC, allineato), `node` e `m
 `page` (da 0), `size` (default 500, massimo 5000).
 
 ```bash
-curl -H "X-API-Key: $IANUS_API_KEY" \
+curl -H "X-API-Key: <api-key del file>" \
   "http://localhost:8080/ianus/v2/opennms/metrics?window=PT5M"
 
-curl -H "X-API-Key: $IANUS_API_KEY" \
+curl -H "X-API-Key: <api-key del file>" \
   "http://localhost:8080/ianus/v2/zabbix/events?window=PT30M&end=2026-10-14T10:00:00Z"
 ```
 

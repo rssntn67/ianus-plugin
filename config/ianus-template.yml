@@ -11,8 +11,8 @@ server:
   port: 8080
 
 ianus:
-  # Obbligatoria: IANUS la invia nell'header X-API-Key
-  api-key: ${IANUS_API_KEY:}
+  # Obbligatoria: IANUS la invia nell'header X-API-Key. Se resta vuota il plugin non si avvia
+  api-key: ""
   plugin-version: 2.0.0
   windows: [PT5M, PT30M]
   default-page-size: 500

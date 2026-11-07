@@ -25,7 +25,7 @@ public class ApiKeyFilter extends OncePerRequestFilter {
 
     public ApiKeyFilter(IanusProperties properties) {
         if (properties.apiKey() == null || properties.apiKey().isBlank()) {
-            throw new IllegalStateException("ianus.api-key non configurata: impostare IANUS_API_KEY");
+            throw new IllegalStateException("ianus.api-key non configurata: impostarla nel file di configurazione esterno");
         }
         this.expected = properties.apiKey().getBytes(StandardCharsets.UTF_8);
     }
