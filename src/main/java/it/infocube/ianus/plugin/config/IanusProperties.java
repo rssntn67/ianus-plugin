@@ -10,7 +10,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *
  * @param apiKey          chiave che IANUS deve inviare nell'header X-API-Key (obbligatoria)
  * @param pluginVersion   versione riportata nella busta delle risposte
- * @param windows         finestre supportate (almeno PT5M e PT30M)
+ * @param windows         finestre supportate: devono comprendere PT5M e PT30M (sezione 3.1)
  * @param defaultPageSize dimensione di pagina se il parametro size non e' indicato
  * @param maxPageSize     dimensione massima di pagina
  * @param retention       storia conservata in memoria dai Collector
@@ -29,6 +29,11 @@ public record IanusProperties(
         windows = windows == null || windows.isEmpty()
                 ? List.of(Duration.ofMinutes(5), Duration.ofMinutes(30))
                 : List.copyOf(windows);
+        for (Duration required : List.of(Duration.ofMinutes(5), Duration.ofMinutes(30))) {
+            if (!windows.contains(required)) {
+                throw new IllegalArgumentException("ianus.windows deve comprendere " + required + ": " + windows);
+            }
+        }
         defaultPageSize = defaultPageSize == null ? 500 : defaultPageSize;
         maxPageSize = maxPageSize == null ? 5000 : maxPageSize;
         retention = retention == null ? Duration.ofHours(3) : retention;

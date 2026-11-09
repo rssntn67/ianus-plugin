@@ -49,8 +49,9 @@ public class ZabbixAdapter implements SourceAdapter {
     static final String[] SEVERITIES = {"Not classified", "Information", "Warning", "Average", "High", "Disaster"};
     private static final Set<String> CHANGE_STEPS = Set.of("9", "10");
 
+    /** I valori si dividono per {@code divisor} per passare all'unita' IANUS (millisecondi -> secondi). */
     record Item(String itemId, String node, String metric, String instance, String unit, int valueType,
-                String name, MetricKind kind) {
+                String name, MetricKind kind, double divisor) {
     }
 
     record Inventory(List<Item> items, Instant loadedAt) {
@@ -126,10 +127,15 @@ public class ZabbixAdapter implements SourceAdapter {
         }
         List<MetricSeries> out = items.stream()
                 .map(i -> MetricSeries.of(i.node(), i.metric(), i.instance(), i.unit(),
-                        Aggregator.of(i.kind(), samples.getOrDefault(i.itemId(), List.of()), window),
+                        Aggregator.of(i.kind(), scaled(samples.getOrDefault(i.itemId(), List.of()), i.divisor()),
+                                window),
                         Map.of("item", i.name() == null ? "" : i.name())))
                 .toList();
         return new SourceResult<>(out, complete);
+    }
+
+    private static List<Sample> scaled(List<Sample> samples, double divisor) {
+        return divisor == 1 ? samples : samples.stream().map(s -> new Sample(s.ts(), s.value() / divisor)).toList();
     }
 
     private void history(int valueType, List<String> itemIds, Instant timeFrom, TimeWindow window,
@@ -268,9 +274,11 @@ public class ZabbixAdapter implements SourceAdapter {
         String host = hosts.isEmpty() ? "" : Json.str(hosts.get(0).get("host"), "");
         String[] parts = splitKey(key);
         boolean counter = counterKeys.contains(parts[0]) && !hasChangeStep(it);
-        String unit = unit(Json.str(it.get("units"), ""));
+        String units = Json.str(it.get("units"), "");
+        String unit = unit(units);
         return new Item(id, host, Names.snake(parts[0]), parts[1], counter ? rateUnit(unit) : unit,
-                vt.intValue(), Json.str(it.get("name")), counter ? MetricKind.COUNTER : MetricKind.GAUGE);
+                vt.intValue(), Json.str(it.get("name")), counter ? MetricKind.COUNTER : MetricKind.GAUGE,
+                "ms".equals(units) ? 1_000.0 : 1);
     }
 
     private static boolean hasChangeStep(Map<String, Object> it) {
@@ -299,7 +307,7 @@ public class ZabbixAdapter implements SourceAdapter {
             case "Bps" -> "bytes_per_second";
             case "bps" -> "bits_per_second";
             case "s", "uptime" -> "seconds";
-            case "ms" -> "milliseconds";
+            case "ms" -> "seconds";
             default -> units.toLowerCase(Locale.ROOT);
         };
     }

@@ -283,7 +283,7 @@ public class OpenNmsAdapter implements SourceAdapter {
                     : Json.str(resource.get("label"), Json.str(resource.get("name"), resourceId));
             for (String attribute : attributeNames(resource.get("rrdGraphAttributes"))) {
                 refs.add(new SeriesRef(node, resourceId, attribute, Names.snake(attribute), instance,
-                        units.getOrDefault(attribute, "unknown")));
+                        units.getOrDefault(attribute, "none")));
             }
         }
         Object children = resource.get("children");

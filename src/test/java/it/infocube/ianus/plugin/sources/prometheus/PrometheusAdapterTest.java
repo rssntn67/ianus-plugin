@@ -194,4 +194,13 @@ class PrometheusAdapterTest {
                             List.<Object>of(t0 + 180, "1"))));
         }
     }
+
+    @Test
+    void metricNameMustBeSnakeCase() {
+        assertThatThrownBy(() -> new PromMetric("CpuUsage", null, null, null, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("CpuUsage");
+        assertThatThrownBy(() -> new PromMetric(null, "up", null, null, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }

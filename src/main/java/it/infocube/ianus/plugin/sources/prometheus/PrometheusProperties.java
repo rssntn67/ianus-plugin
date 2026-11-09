@@ -45,6 +45,10 @@ public record PrometheusProperties(
     public record PromMetric(String name, String selector, MetricKind kind, String unit, List<String> instanceLabels) {
 
         public PromMetric {
+            if (name == null || !name.matches("[a-z][a-z0-9_]*")) {
+                throw new IllegalArgumentException("Nome di metrica Prometheus non valido: '" + name
+                        + "'. Usare minuscole, cifre e _ (es. cpu_usage)");
+            }
             selector = selector == null || selector.isBlank() ? name : selector;
             kind = kind == null ? MetricKind.GAUGE : kind;
             unit = unit == null || unit.isBlank() ? "none" : unit;

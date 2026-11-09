@@ -73,7 +73,8 @@ class ZabbixAdapterTest {
                         item("3", "net.if.out[eth1]", "", List.of("9"), withSteps),
                         item("4", "net.if.in[eth1]", "", List.of(), withSteps),
                         item("5", "system.cpu.load", "", List.of(), withSteps),
-                        item("6", "net.if.in[slow]", "B", List.of(), withSteps));
+                        item("6", "net.if.in[slow]", "B", List.of(), withSteps),
+                        item("7", "icmppingsec", "ms", List.of(), withSteps));
             }
             long from = ((Number) p.get("time_from")).longValue();
             String id = ((List<?>) p.get("itemids")).get(0).toString();
@@ -88,6 +89,7 @@ class ZabbixAdapterTest {
                         sample(id, 180, "160"));
                 case "2" -> List.of(sample(id, 60, "10"), sample(id, 120, "20"));
                 case "6" -> List.of(sample(id, -540, "1000"), sample(id, 60, "7000"));
+                case "7" -> List.of(sample(id, 60, "250"), sample(id, 120, "350"));
                 default -> List.of();
             };
         }
@@ -154,6 +156,16 @@ class ZabbixAdapterTest {
     @Test
     void listedItemWithSimpleChangeStaysGauge() {
         assertThat(series("net_if_out", "eth1").unit()).isEqualTo("none");
+    }
+
+    @Test
+    void millisecondsBecomeSeconds() {
+        MetricSeries s = series("icmppingsec", "");
+
+        assertThat(s.unit()).isEqualTo("seconds");
+        assertThat(s.value()).isCloseTo(0.3, org.assertj.core.data.Offset.offset(1e-9));
+        assertThat(s.min()).isEqualTo(0.25);
+        assertThat(s.max()).isEqualTo(0.35);
     }
 
     @Test

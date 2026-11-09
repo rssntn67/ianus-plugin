@@ -106,9 +106,9 @@ esempio, con blocchi da 5 minuti una richiesta `PT30M` consolida sei blocchi.
 | `ianus.sources.<sorgente>.collect-interval` | `PT5M` | Ampiezza dei blocchi e frequenza di raccolta |
 | `ianus.sources.<sorgente>.collect-delay` | `PT1M` | Attesa dopo la fine del blocco, perché l'NMS abbia i dati |
 
-Il plugin non parte se `collect-interval` non è positivo o non divide ogni finestra supportata, se `collect-delay` è
-negativo, se `retention` è minore della finestra più ampia più `collect-interval` e `collect-delay`, o se la `retention`
-di Icinga è minore di `ianus.retention`.
+Il plugin non parte se `ianus.windows` non comprende `PT5M` e `PT30M`, se `collect-interval` non è positivo o non
+divide ogni finestra supportata, se `collect-delay` è negativo, se `retention` è minore della finestra più ampia più
+`collect-interval` e `collect-delay`, o se la `retention` di Icinga è minore di `ianus.retention`.
 
 | Situazione | Risposta |
 | --- | --- |
@@ -145,7 +145,7 @@ contiene quanto letto fino a quel punto, con `complete: false`.
 - `ianus.retention` non deve superare il periodo conservato a piena risoluzione: oltre, i punti recuperati
   sono già mediati su intervalli più lunghi e minimo e massimo perdono i picchi.
 - I DS di tipo COUNTER sono già restituiti come tassi da OpenNMS, quindi si aggregano come gauge.
-- OpenNMS non espone l'unità di misura: si configura per attributo in `units` (altrimenti `unknown`).
+- OpenNMS non espone l'unità di misura: si configura per attributo in `units` (altrimenti `none`).
 - **Eventi**: `GET /api/v2/events` con filtro FIQL su `eventTime`.
 
 ### Prometheus
@@ -157,6 +157,7 @@ contiene quanto letto fino a quel punto, con `complete: false`.
   campioni nel periodo `series-lookback` (default 1 ora) prima della fine della finestra; oltre quel
   periodo sparisce. Costa una query in più per metrica.
 - Le metriche esposte sono quelle elencate in `metrics` (nome IANUS, selettore, tipo, unità, etichette di istanza).
+  Il nome IANUS va scritto in minuscolo con `_` (es. `cpu_usage`), altrimenti il plugin non parte.
 - **Eventi**: serie `ALERTS{alertstate="firing"}` campionata ogni `alert-step`; ogni periodo di attivazione conta
   come un'occorrenza, anche se attraversa più blocchi.
 
@@ -182,6 +183,8 @@ contiene quanto letto fino a quel punto, con `complete: false`.
 ### Zabbix
 - **Metriche**: item numerici (`value_type` 0 e 3) letti con `history.get` nella finestra.
   `metric` = chiave senza parametri (`system.cpu.util` → `system_cpu_util`), `instance` = parametri della chiave.
+  Le unità sono convertite nel modello IANUS (`%` → `percent`, `Bps` → `bytes_per_second`, `ms` → `seconds`
+  dividendo il valore); un item senza unità ha `none`.
 - Zabbix non distingue i contatori: quelli da convertire in tassi vanno elencati in `counter-keys` (chiavi
   senza parametri, es. `net.if.in`). L'unità diventa `<unità>_per_second` e la lettura parte `counter-lookback`
   prima del blocco (default 15 minuti), per avere il campione precedente: deve superare l'intervallo di

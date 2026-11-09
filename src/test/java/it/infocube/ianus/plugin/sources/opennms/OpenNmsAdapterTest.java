@@ -83,6 +83,16 @@ class OpenNmsAdapterTest {
     }
 
     @Test
+    void attributeWithoutConfiguredUnitIsNone() {
+        FailingClient client = new FailingClient(props, new HttpServerErrorException(HttpStatus.INTERNAL_SERVER_ERROR));
+
+        SourceResult<MetricSeries> result = new OpenNmsAdapter(props, client, Clock.systemUTC())
+                .metrics(WINDOW, QueryFilter.NONE);
+
+        assertThat(result.items()).extracting(MetricSeries::unit).containsOnly("none");
+    }
+
+    @Test
     void eventConversion() {
         RawEvent e = OpenNmsAdapter.toRaw(Map.of(
                 "uei", "uei.opennms.org/nodes/interfaceDown",
