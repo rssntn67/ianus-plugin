@@ -270,7 +270,7 @@ La scheda OR8 chiede plugin resilienti e tolleranti alla perdita di connessione.
 - **Cache.** I blocchi raccolti stanno in memoria per la profondità storica e sono l'unica fonte delle risposte a IANUS.
 - **Sicurezza.** IANUS si autentica verso il plugin con una API key inviata nell'header HTTP X-API-Key; senza chiave o con chiave non valida il plugin risponde 401. Ogni installazione ha la propria chiave, sostituibile senza modificare il codice. Le credenziali verso l'NMS stanno nella configurazione o in un secret dell'orchestratore, mai nel codice.
 - **Configurazione.** Per ogni sorgente: URL, credenziali, timeout, filtri di default. Le finestre supportate valgono per tutte le sorgenti. In Spring Boot è una classe `@ConfigurationProperties`. Il plugin si avvia solo con un file di configurazione esterno, indicato all'avvio: senza file non parte, e quello distribuito con il codice è solo un template.
-- **Osservabilità.** Il plugin registra richieste, tempi di risposta dell'NMS, errori e severità non mappate; `/ianus/v2/health` riporta lo stato di ogni sorgente.
+- **Osservabilità.** Il plugin registra richieste, tempi di risposta dell'NMS, errori e severità non mappate; `/ianus/v2/health` riporta lo stato di ogni sorgente ed è degradato anche quando una raccolta si ferma, cioè quando l'ultimo blocco è più vecchio di due intervalli di raccolta più l'attesa.
 - **Distribuzione.** Il plugin è un microservizio containerizzato che ospita le sorgenti abilitate nel file di configurazione, distribuibile sull'orchestratore Kubernetes predisposto in A8.1. Per isolare una sorgente basta avviare un'istanza con quella sola sorgente abilitata.
 
 ## 9. Come sviluppare un nuovo plugin

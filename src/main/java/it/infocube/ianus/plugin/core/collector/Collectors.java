@@ -33,6 +33,8 @@ public class Collectors implements SmartLifecycle {
 
     private final Map<String, BlockStore> stores = new LinkedHashMap<>();
     private final Map<String, SourceCollector> collectors = new LinkedHashMap<>();
+    private final Map<String, Duration> delays = new LinkedHashMap<>();
+    private final Instant createdAt;
     private final List<Thread> threads = new ArrayList<>();
     private final Clock clock;
     private volatile boolean running;
@@ -40,12 +42,14 @@ public class Collectors implements SmartLifecycle {
     public Collectors(ObjectProvider<SourceAdapter> adapters, CollectorProperties settings, IanusProperties properties,
                       WindowResolver resolver, Clock clock) {
         this.clock = clock;
+        this.createdAt = clock.instant();
         List<Duration> windows = resolver.supported();
         adapters.orderedStream().forEach(adapter -> {
             CollectSettings s = settings.settings(adapter.system());
             validate(adapter.system(), s, windows, properties.retention());
             BlockStore store = new BlockStore(s.collectInterval(), properties.retention(), clock);
             stores.put(adapter.system(), store);
+            delays.put(adapter.system(), s.collectDelay());
             collectors.put(adapter.system(),
                     new SourceCollector(adapter, store, s.collectDelay(), properties.retention(), clock));
         });
@@ -76,6 +80,17 @@ public class Collectors implements SmartLifecycle {
 
     public BlockStore store(String system) {
         return stores.get(system);
+    }
+
+    /**
+     * Raccolta ferma: l'ultimo blocco, o l'avvio se non ce n'e' ancora uno, e' piu' vecchio di due intervalli
+     * piu' l'attesa. In un ciclo regolare il ritardo non supera un intervallo piu' l'attesa e la durata della lettura.
+     */
+    public boolean stale(String system, Instant now) {
+        BlockStore store = stores.get(system);
+        Instant since = store.latest().map(Block::end).orElse(createdAt);
+        Duration limit = store.interval().multipliedBy(2).plus(delays.get(system));
+        return Duration.between(since, now).compareTo(limit) > 0;
     }
 
     @Override

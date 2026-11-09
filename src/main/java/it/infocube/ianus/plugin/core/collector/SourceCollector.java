@@ -22,12 +22,17 @@ import org.slf4j.LoggerFactory;
 /**
  * Ciclo di raccolta di una sorgente: legge il blocco dovuto e, nel tempo libero, recupera quelli
  * mancanti o incompleti entro la retention. Un blocco incompleto si rilegge al massimo una volta per
- * ciclo, cosi' l'NMS ha il tempo di completare i dati. Non gestisce thread: lo usa un solo thread alla volta.
+ * ciclo, cosi' l'NMS ha il tempo di completare i dati. Un blocco che fallisce con un errore imprevisto si
+ * salta fino al ciclo successivo e si abbandona dopo 3 errori, cosi' non blocca il recupero dei piu' vecchi.
+ * Non gestisce thread: lo usa un solo thread alla volta.
  */
 public class SourceCollector {
 
     private static final Logger LOG = LoggerFactory.getLogger(SourceCollector.class);
     private static final int MAX_REREADS = 3;
+    private static final int MAX_ERRORS = 3;
+
+    private enum Outcome { SAVED, UNAVAILABLE, FAILED }
 
     private final SourceAdapter adapter;
     private final BlockStore store;
@@ -37,6 +42,8 @@ public class SourceCollector {
     private final Clock clock;
     private final Map<Instant, Integer> rereads = new HashMap<>();
     private final Set<Instant> readThisCycle = new HashSet<>();
+    private final Map<Instant, Integer> errors = new HashMap<>();
+    private final Set<Instant> failedThisCycle = new HashSet<>();
     private Instant lastDue;
 
     public SourceCollector(SourceAdapter adapter, BlockStore store, Duration delay, Duration retention, Clock clock) {
@@ -56,6 +63,7 @@ public class SourceCollector {
         }
         lastDue = due;
         readThisCycle.clear();
+        failedThisCycle.clear();
         readThisCycle.add(due);
         long start = System.nanoTime();
         read(due);
@@ -71,18 +79,22 @@ public class SourceCollector {
         Instant now = clock.instant();
         Instant oldest = now.minus(retention);
         rereads.keySet().removeIf(t -> t.isBefore(oldest));
+        errors.keySet().removeIf(t -> t.isBefore(oldest));
         for (Instant t = dueStart(now); !t.isBefore(oldest); t = t.minus(interval)) {
+            if (failedThisCycle.contains(t) || errors.getOrDefault(t, 0) >= MAX_ERRORS) {
+                continue;
+            }
             Optional<Block> block = store.get(t);
             if (block.isEmpty()) {
                 readThisCycle.add(t);
-                return read(t);
+                return read(t) != Outcome.UNAVAILABLE;
             }
             if (!block.get().complete() && rereads.getOrDefault(t, 0) < MAX_REREADS && readThisCycle.add(t)) {
-                boolean answered = read(t);
-                if (answered) {
+                Outcome outcome = read(t);
+                if (outcome == Outcome.SAVED) {
                     rereads.merge(t, 1, Integer::sum);
                 }
-                return answered;
+                return outcome != Outcome.UNAVAILABLE;
             }
         }
         return false;
@@ -100,7 +112,7 @@ public class SourceCollector {
         return Instant.ofEpochMilli(Math.floorDiv(limit, step) * step).minus(interval);
     }
 
-    private boolean read(Instant start) {
+    private Outcome read(Instant start) {
         TimeWindow window = new TimeWindow(start, start.plus(interval), interval);
         try {
             long begin = System.nanoTime();
@@ -111,13 +123,18 @@ public class SourceCollector {
             log("events", events, begin);
             store.put(new Block(window.start(), window.end(), metrics.items(), events.items(),
                     metrics.complete() && events.complete()));
-            return true;
+            return Outcome.SAVED;
         } catch (SourceUnavailableException e) {
             LOG.warn("{}: blocco {} non letto: {}", adapter.system(), start, e.getMessage());
+            return Outcome.UNAVAILABLE;
         } catch (RuntimeException e) {
             LOG.error("{}: errore imprevisto sul blocco {}", adapter.system(), start, e);
+            failedThisCycle.add(start);
+            if (errors.merge(start, 1, Integer::sum) == MAX_ERRORS) {
+                LOG.warn("{}: blocco {} abbandonato dopo {} errori", adapter.system(), start, MAX_ERRORS);
+            }
+            return Outcome.FAILED;
         }
-        return false;
     }
 
     private void log(String kind, SourceResult<?> result, long begin) {

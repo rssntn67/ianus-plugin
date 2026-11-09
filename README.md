@@ -122,9 +122,12 @@ divide ogni finestra supportata, se `collect-delay` è negativo, se `retention` 
   raccolto.
 - All'avvio e dopo un'interruzione il Collector recupera i blocchi mancanti dal più recente, nel tempo libero fra un
   ciclo e l'altro. Un blocco incompleto viene riletto al massimo una volta per ciclo e 3 volte in tutto, e resta quello
-  già salvato finché non arriva una versione completa.
+  già salvato finché non arriva una versione completa. Un blocco che fallisce con un errore imprevisto viene saltato
+  fino al ciclo successivo, così il recupero prosegue con i più vecchi, e dopo 3 errori viene abbandonato.
 - `capabilities` risponde con metriche e nodi dell'ultimo blocco, anche se l'NMS è giù. `history_depth` è la
-  `retention`. `health` riporta `last_collected`, la fine dell'ultimo blocco raccolto.
+  `retention`. `health` riporta `last_collected`, la fine dell'ultimo blocco raccolto, e risponde `DEGRADED` se un NMS
+  non risponde o se una raccolta è ferma: l'ultimo blocco, o l'avvio se non ce n'è ancora uno, è più vecchio di due
+  `collect-interval` più `collect-delay`.
 - La storia sta in memoria e riparte vuota a ogni riavvio. Una misura con 50.000 serie e 3 ore di blocchi da 5 minuti
   ha dato circa 110 MB, a cui si aggiunge la memoria per le risposte: come punto di partenza usare `-Xmx1g`.
 - Il log avvisa se un ciclo dura più di `collect-interval`. Su OpenNMS, con `batch-size` 50 e decine di migliaia di

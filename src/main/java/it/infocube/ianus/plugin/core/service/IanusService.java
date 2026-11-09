@@ -106,8 +106,10 @@ public class IanusService {
                 List.copyOf(metrics), List.copyOf(nodes), properties.retention().toString());
     }
 
+    /** DEGRADED se un NMS non risponde o se la raccolta di una sorgente si e' fermata. */
     public HealthResponse health() {
         List<SourceHealth> sources = new ArrayList<>();
+        boolean allUp = true;
         for (SourceAdapter a : adapters.values()) {
             SourceHealth health;
             try {
@@ -115,10 +117,17 @@ public class IanusService {
             } catch (RuntimeException e) {
                 health = new SourceHealth(a.system(), a.instanceId(), false, e.getMessage());
             }
-            sources.add(health.withLastCollected(collectors.store(a.system()).latest()
-                    .map(b -> Times.format(b.end())).orElse(null)));
+            String last = collectors.store(a.system()).latest().map(b -> Times.format(b.end())).orElse(null);
+            boolean stale = collectors.stale(a.system(), clock.instant());
+            if (stale) {
+                String reason = last == null ? "Raccolta ferma: nessun blocco raccolto"
+                        : "Raccolta ferma: ultimo blocco concluso alle " + last;
+                health = new SourceHealth(health.system(), health.id(), health.reachable(),
+                        health.reachable() ? reason : health.message() + "; " + reason);
+            }
+            allUp &= health.reachable() && !stale;
+            sources.add(health.withLastCollected(last));
         }
-        boolean allUp = sources.stream().allMatch(SourceHealth::reachable);
         return new HealthResponse(allUp ? "UP" : "DEGRADED", properties.pluginVersion(), sources);
     }
 

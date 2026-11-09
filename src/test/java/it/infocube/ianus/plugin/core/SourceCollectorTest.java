@@ -57,6 +57,7 @@ class SourceCollectorTest {
         boolean eventsComplete = true;
         Instant incompleteBlock;
         Instant failingBlock;
+        Instant brokenBlock;
 
         @Override
         public String system() {
@@ -76,6 +77,9 @@ class SourceCollectorTest {
             }
             if (window.start().equals(failingBlock)) {
                 throw new SourceUnavailableException("fake", "giu'");
+            }
+            if (window.start().equals(brokenBlock)) {
+                throw new IllegalStateException("dato non interpretabile");
             }
             assertThat(filter).isEqualTo(QueryFilter.NONE);
             assertThat(window.duration()).isEqualTo(FIVE);
@@ -180,11 +184,27 @@ class SourceCollectorTest {
     }
 
     @Test
-    void unexpectedExceptionDuringRecoveryStopsIt() {
+    void unexpectedErrorOnBlockDoesNotStopRecoveryOfOlderOnes() {
         collector.collectDue();
-        adapter.failure = new IllegalStateException("imprevisto");
+        adapter.brokenBlock = at("09:55:00");
 
-        assertThat(collector.recoverOne()).isFalse();
+        assertThat(collector.recoverOne()).isTrue();
+        assertThat(collector.recoverOne()).isTrue();
+
+        assertThat(adapter.reads).containsExactly(at("10:00:00"), at("09:55:00"), at("09:50:00"));
+        assertThat(store.get(at("09:50:00"))).isPresent();
+    }
+
+    @Test
+    void blockWithRepeatedErrorsIsAbandonedAfterThreeAttempts(CapturedOutput output) {
+        adapter.brokenBlock = at("09:55:00");
+
+        for (String now : List.of("10:06:00", "10:11:00", "10:16:00", "10:21:00", "10:26:00")) {
+            cycle(now);
+        }
+
+        assertThat(readsOf("09:55:00")).isEqualTo(3);
+        assertThat(output.getOut()).contains("fake: blocco 2026-10-14T09:55:00Z abbandonato dopo 3 errori");
     }
 
     @Test

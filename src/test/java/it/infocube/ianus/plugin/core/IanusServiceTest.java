@@ -219,6 +219,36 @@ class IanusServiceTest {
     }
 
     @Test
+    void healthIsDegradedWhenCollectionStops() {
+        collectors.store("fake").put(block(-15, true));
+
+        assertThat(service.health().status()).isEqualTo("DEGRADED");
+        assertThat(service.health().sources()).singleElement().satisfies(s -> {
+            assertThat(s.reachable()).isTrue();
+            assertThat(s.message()).isEqualTo("Raccolta ferma: ultimo blocco concluso alle 2026-10-14T09:50:00Z");
+        });
+    }
+
+    @Test
+    void healthIsUpWhileCollectionIsOnTime() {
+        collectors.store("fake").put(block(0, true));
+
+        assertThat(service.health().status()).isEqualTo("UP");
+    }
+
+    @Test
+    void healthIsDegradedWhenNoBlockArrivesAfterStartup() {
+        Clock later = Clock.offset(clock, Duration.ofMinutes(12));
+        Collectors started = collectors(clock);
+        IanusService service = new IanusService(provider(adapter), new WindowResolver(props.windows(), later),
+                started, props, later);
+
+        assertThat(service.health().status()).isEqualTo("DEGRADED");
+        assertThat(service.health().sources()).singleElement()
+                .satisfies(s -> assertThat(s.message()).isEqualTo("Raccolta ferma: nessun blocco raccolto"));
+    }
+
+    @Test
     void healthReportsLastCollected() {
         assertThat(service.health().sources()).singleElement()
                 .satisfies(s -> assertThat(s.lastCollected()).isNull());
