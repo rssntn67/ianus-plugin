@@ -3,7 +3,8 @@
 Strato di integrazione tra i sistemi di Network Management (NMS) e l'appliance IANUS.
 Implementa il contratto descritto in [SPECIFICA.md](SPECIFICA.md) (*IANUS – Architettura di Integrazione e Modello Dati v2.0*):
 
-- IANUS chiede una **finestra temporale** (`window=PT5M` o `PT30M`), allineata a multipli della sua ampiezza;
+- IANUS chiede una **finestra temporale** (`window=PT5M` o `PT30M`, altre si aggiungono in `ianus.windows`), allineata
+  a multipli della sua ampiezza;
 - il plugin risponde con **dati sintetici**: per ogni serie `value` (media), `min`, `max`, `samples`;
   per gli eventi, gruppi con `count`, `first_seen`, `last_seen`;
 - severità normalizzate su **INFO / WARNING / ERROR / CRITICAL**, con la severità nativa conservata;
@@ -157,7 +158,8 @@ contiene quanto letto fino a quel punto, con `complete: false`.
   campioni nel periodo `series-lookback` (default 1 ora) prima della fine della finestra; oltre quel
   periodo sparisce. Costa una query in più per metrica.
 - Le metriche esposte sono quelle elencate in `metrics` (nome IANUS, selettore, tipo, unità, etichette di istanza).
-  Il nome IANUS va scritto in minuscolo con `_` (es. `cpu_usage`), altrimenti il plugin non parte.
+  Il nome IANUS va scritto in minuscolo con `_` (es. `cpu_usage`), altrimenti il plugin non parte. Senza `unit`
+  l'unità è `none`.
 - **Eventi**: serie `ALERTS{alertstate="firing"}` campionata ogni `alert-step`; ogni periodo di attivazione conta
   come un'occorrenza, anche se attraversa più blocchi.
 
@@ -166,7 +168,8 @@ contiene quanto letto fino a quel punto, con `complete: false`.
   `/v1/objects/hosts` e `/v1/objects/services` ogni `poll-interval` (default 30 secondi) e conserva i campioni in
   memoria per `ianus.sources.icinga.retention` (default 24 ore).
 - **Metriche**: performance data dei controlli (`metric` = etichetta, `instance` = servizio),
-  con conversione delle unità (ms → seconds, KB → bytes, `c` → contatore).
+  con conversione delle unità (ms → seconds, KB → bytes, `c` → contatore); senza unità `none`, le altre unità
+  restano come sono, in minuscolo.
 - **Eventi**: cambi di stato di host e servizi (`last_state_change`).
 - Dopo un riavvio il buffer riparte vuoto: le finestre precedenti all'avvio risultano `complete: false`.
 - Se Icinga smette di rispondere, le finestre toccate dall'interruzione risultano `complete: false`;
@@ -184,7 +187,7 @@ contiene quanto letto fino a quel punto, con `complete: false`.
 - **Metriche**: item numerici (`value_type` 0 e 3) letti con `history.get` nella finestra.
   `metric` = chiave senza parametri (`system.cpu.util` → `system_cpu_util`), `instance` = parametri della chiave.
   Le unità sono convertite nel modello IANUS (`%` → `percent`, `Bps` → `bytes_per_second`, `ms` → `seconds`
-  dividendo il valore); un item senza unità ha `none`.
+  dividendo il valore); un item senza unità ha `none`, le altre unità restano come sono, in minuscolo.
 - Zabbix non distingue i contatori: quelli da convertire in tassi vanno elencati in `counter-keys` (chiavi
   senza parametri, es. `net.if.in`). L'unità diventa `<unità>_per_second` e la lettura parte `counter-lookback`
   prima del blocco (default 15 minuti), per avere il campione precedente: deve superare l'intervallo di

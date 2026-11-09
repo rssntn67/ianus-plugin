@@ -99,7 +99,7 @@ Una serie è identificata da `node`, `metric`, `instance` e `labels`; per ogni s
 | `node` | stringa | sì | Oggetto monitorato che ospita la serie: hostname, IP o identificativo del nodo nell'NMS |
 | `metric` | stringa | sì | Nome della metrica, in minuscolo con `_` (es. `cpu_usage`, `if_in_traffic`) |
 | `instance` | stringa | sì | Istanza nel nodo: indice CPU, interfaccia, tupla NetFlow. Stringa vuota se la metrica è unica sul nodo |
-| `unit` | stringa | sì | Unità dei valori: `percent`, `bytes_per_second`, `count`, `seconds`, `celsius`, … |
+| `unit` | stringa | sì | Unità dei valori: `percent`, `bytes_per_second`, `count`, `seconds`, `celsius`, …; `none` se l'NMS non la indica |
 | `value` | numero o `null` | sì | Media nella finestra (sezione 3.3); `null` se non ci sono campioni |
 | `min` | numero o `null` | sì | Valore minimo nella finestra; `null` se non ci sono campioni |
 | `max` | numero o `null` | sì | Valore massimo nella finestra; `null` se non ci sono campioni |
