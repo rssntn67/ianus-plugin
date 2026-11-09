@@ -206,11 +206,11 @@ IANUS usa una sola scala a quattro livelli, che unisce quelle delle sezioni 4 e 
 | OpenNMS | Indeterminate, Cleared, Normal | Warning, Minor | Major | Critical |
 | Syslog (RFC 5424) | 5 Notice, 6 Informational, 7 Debug | 4 Warning | 3 Error | 0 Emergency, 1 Alert, 2 Critical |
 | Zabbix | Not classified, Information | Warning | Average, High | Disaster |
-| Icinga 2 | OK, UP | WARNING, UNKNOWN | UNREACHABLE | CRITICAL, DOWN |
+| Icinga 2 | OK, UP | WARNING, UNKNOWN | — | CRITICAL, DOWN |
 | Prometheus (etichetta `severity` degli alert) | info, none | warning, etichetta assente | error | critical |
 | Eventi Windows | Information, Verbose, Audit Success | Warning | Error, Audit Failure | Critical |
 
-Una severità nativa assente dalla tabella va trattata come `WARNING` e segnalata nel log del plugin.
+Una severità nativa assente dalla tabella, o vuota, va trattata come `WARNING` e segnalata nel log del plugin. Fa eccezione l'etichetta `severity` assente di Prometheus, prevista dalla tabella.
 
 ## 7. Serializzazione e contratto OpenAPI
 
@@ -253,7 +253,7 @@ Nell'endpoint eventi l'array si chiama `events`. `complete` vale `false` quando 
 | Codice | Quando |
 | --- | --- |
 | 400 | `window` non supportata, `end` non allineato o nel futuro, finestra più vecchia della profondità storica (`window_too_old`), parametri non validi |
-| 401 / 403 | API key assente o non valida |
+| 401 | API key assente o non valida |
 | 404 | Sorgente non configurata nel plugin |
 | 503 | Nessun blocco raccolto per la finestra: nessun dato restituito |
 

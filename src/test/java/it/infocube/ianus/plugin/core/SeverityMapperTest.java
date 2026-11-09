@@ -5,9 +5,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import it.infocube.ianus.plugin.core.model.Severity;
 import it.infocube.ianus.plugin.core.severity.SeverityMapper;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 
+@ExtendWith(OutputCaptureExtension.class)
 class SeverityMapperTest {
 
     @Test
@@ -35,7 +39,7 @@ class SeverityMapperTest {
             "zabbix, Not classified, INFO", "zabbix, Information, INFO", "zabbix, Warning, WARNING",
             "zabbix, Average, ERROR", "zabbix, High, ERROR", "zabbix, Disaster, CRITICAL",
             "icinga, OK, INFO", "icinga, UP, INFO", "icinga, WARNING, WARNING", "icinga, UNKNOWN, WARNING",
-            "icinga, UNREACHABLE, ERROR", "icinga, CRITICAL, CRITICAL", "icinga, DOWN, CRITICAL",
+            "icinga, CRITICAL, CRITICAL", "icinga, DOWN, CRITICAL",
             "prometheus, info, INFO", "prometheus, none, INFO", "prometheus, warning, WARNING",
             "prometheus, error, ERROR", "prometheus, critical, CRITICAL",
             "windows, Information, INFO", "windows, Verbose, INFO", "windows, Audit Success, INFO",
@@ -49,5 +53,23 @@ class SeverityMapperTest {
     @Test
     void unknownSeverityBecomesWarning() {
         assertThat(SeverityMapper.map("opennms", "Bizarre")).isEqualTo(Severity.WARNING);
+    }
+
+    @Test
+    void icingaUnreachableIsNotMapped(CapturedOutput output) {
+        assertThat(SeverityMapper.map("icinga", "UNREACHABLE")).isEqualTo(Severity.WARNING);
+        assertThat(output.getOut()).contains("Severita' nativa non mappata (icinga): 'UNREACHABLE' -> WARNING");
+    }
+
+    @Test
+    void blankSeverityIsLogged(CapturedOutput output) {
+        assertThat(SeverityMapper.map("windows", " ")).isEqualTo(Severity.WARNING);
+        assertThat(output.getOut()).contains("Severita' nativa assente (windows) -> WARNING");
+    }
+
+    @Test
+    void blankPrometheusSeverityIsExpected(CapturedOutput output) {
+        assertThat(SeverityMapper.map("prometheus", null)).isEqualTo(Severity.WARNING);
+        assertThat(output.getOut()).doesNotContain("Severita' nativa assente (prometheus)");
     }
 }

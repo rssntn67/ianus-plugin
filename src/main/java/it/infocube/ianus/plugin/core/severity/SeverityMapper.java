@@ -12,7 +12,8 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Mappatura dalle severita' native alla scala IANUS (sezione 6.1).
- * Una severita' assente dalla tabella diventa WARNING e viene segnalata nel log.
+ * Una severita' assente dalla tabella, o vuota, diventa WARNING e viene segnalata nel log;
+ * per Prometheus l'etichetta severity assente e' prevista dalla tabella e non si segnala.
  */
 public final class SeverityMapper {
 
@@ -38,7 +39,6 @@ public final class SeverityMapper {
 
         put("icinga", Severity.INFO, "ok", "up");
         put("icinga", Severity.WARNING, "warning", "unknown");
-        put("icinga", Severity.ERROR, "unreachable");
         put("icinga", Severity.CRITICAL, "critical", "down");
 
         put("prometheus", Severity.INFO, "info", "none");
@@ -58,6 +58,9 @@ public final class SeverityMapper {
     public static Severity map(String system, String nativeSeverity) {
         if (nativeSeverity == null || nativeSeverity.isBlank()) {
             // Prometheus: etichetta severity assente -> WARNING per specifica
+            if (!"prometheus".equals(system) && WARNED.add(system + "/")) {
+                LOG.warn("Severita' nativa assente ({}) -> WARNING", system);
+            }
             return Severity.WARNING;
         }
         String key = nativeSeverity.trim().toLowerCase(Locale.ROOT);
