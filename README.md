@@ -71,7 +71,7 @@ docker run -v /etc/ianus/ianus.yml:/etc/ianus/ianus.yml:ro -p 8080:8080 ianus-pl
 | `GET /ianus/v2/{source}/metrics` | Media, minimo e massimo di ogni serie nella finestra, paginato |
 | `GET /ianus/v2/{source}/events` | Eventi raggruppati per nodo, tipo, istanza e severità |
 | `GET /ianus/v2/{source}/capabilities` | Finestre supportate, metriche, nodi, profondità storica |
-| `GET /ianus/v2/health` | Stato del plugin e raggiungibilità di ogni NMS |
+| `GET /ianus/v2/health` | Stato del plugin, raggiungibilità di ogni NMS e stato della raccolta |
 | `GET /v3/api-docs` | Specifica OpenAPI 3 generata dal codice (non richiede API key) |
 | `GET /swagger-ui.html` | Interfaccia Swagger UI |
 

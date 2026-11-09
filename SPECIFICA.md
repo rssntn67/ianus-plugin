@@ -230,7 +230,7 @@ Tutti i plugin espongono gli stessi endpoint REST e rispondono in JSON con la st
 | `GET /ianus/v2/{source}/metrics` | Serie di performance mediate sulla finestra (sezione 4) |
 | `GET /ianus/v2/{source}/events` | Gruppi di eventi della finestra (sezione 5) |
 | `GET /ianus/v2/{source}/capabilities` | Finestre supportate, metriche e nodi disponibili, profondità storica servibile |
-| `GET /ianus/v2/health` | Stato del plugin, raggiungibilità di ciascun NMS configurato e fine dell'ultimo blocco raccolto (`last_collected`) |
+| `GET /ianus/v2/health` | Stato del plugin, raggiungibilità di ciascun NMS configurato, stato della raccolta e fine dell'ultimo blocco raccolto (`last_collected`) |
 
 Gli endpoint descritti nel SAL4 (`/ianus/opennms/metrics/all`, `/ianus/prometheus/targets`, …) non fanno parte del contratto v2 e non sono più esposti. Il plugin pubblica la specifica OpenAPI 3, generata dal codice (per esempio con springdoc-openapi), e la specifica deve coincidere con questa sezione.
 
@@ -261,7 +261,7 @@ Il corpo dell'errore contiene almeno `code` e `message`.
 
 ## 8. Requisiti operativi dei plugin
 
-La scheda OR8 chiede plugin resilienti e tolleranti alla perdita di connessione. Questo si ottiene rendendo ogni finestra richiedibile anche dopo: se IANUS perde una o più chiamate, le ripete in seguito indicando `end`, e il plugin le serve entro la profondità storica. Dopo un riavvio o un'interruzione il Collector recupera da solo i blocchi mancanti, finché l'NMS li conserva.
+La scheda OR8 chiede plugin resilienti e tolleranti alla perdita di connessione. Questo si ottiene rendendo ogni finestra richiedibile anche dopo: se IANUS perde una o più chiamate, le ripete in seguito indicando `end`, e il plugin le serve entro la profondità storica. Dopo un riavvio o un'interruzione il Collector recupera da solo i blocchi mancanti, finché l'NMS li conserva; un blocco che continua a fallire per un errore imprevisto viene abbandonato dopo 3 tentativi, senza fermare il recupero degli altri.
 
 - **Profondità storica.** È la `retention` del plugin, configurabile con default di 3 ore, dichiarata in `capabilities`. I dati stanno in memoria: dopo un riavvio tornano disponibili man mano che il Collector li recupera.
 - **Idempotenza.** La stessa richiesta (sorgente, finestra, filtri) restituisce sempre lo stesso risultato, salvo blocchi recuperati nel frattempo. I dati arrivati all'NMS dopo la lettura di un blocco completo non vengono visti.
@@ -270,7 +270,7 @@ La scheda OR8 chiede plugin resilienti e tolleranti alla perdita di connessione.
 - **Cache.** I blocchi raccolti stanno in memoria per la profondità storica e sono l'unica fonte delle risposte a IANUS.
 - **Sicurezza.** IANUS si autentica verso il plugin con una API key inviata nell'header HTTP X-API-Key; senza chiave o con chiave non valida il plugin risponde 401. Ogni installazione ha la propria chiave, sostituibile senza modificare il codice. Le credenziali verso l'NMS stanno nella configurazione o in un secret dell'orchestratore, mai nel codice.
 - **Configurazione.** Per ogni sorgente: URL, credenziali, timeout, filtri di default. Le finestre supportate valgono per tutte le sorgenti. In Spring Boot è una classe `@ConfigurationProperties`. Il plugin si avvia solo con un file di configurazione esterno, indicato all'avvio: senza file non parte, e quello distribuito con il codice è solo un template.
-- **Osservabilità.** Il plugin registra richieste, tempi di risposta dell'NMS, errori e severità non mappate; `/ianus/v2/health` riporta lo stato di ogni sorgente ed è degradato anche quando una raccolta si ferma, cioè quando l'ultimo blocco è più vecchio di due intervalli di raccolta più l'attesa.
+- **Osservabilità.** Il plugin registra richieste, tempi di risposta dell'NMS, errori e severità non mappate o assenti; `/ianus/v2/health` riporta lo stato di ogni sorgente ed è degradato anche quando una raccolta si ferma, cioè quando l'ultimo blocco è più vecchio di due intervalli di raccolta più l'attesa.
 - **Distribuzione.** Il plugin è un microservizio containerizzato che ospita le sorgenti abilitate nel file di configurazione, distribuibile sull'orchestratore Kubernetes predisposto in A8.1. Per isolare una sorgente basta avviare un'istanza con quella sola sorgente abilitata.
 
 ## 9. Come sviluppare un nuovo plugin
