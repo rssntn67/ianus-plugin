@@ -75,7 +75,7 @@ La finestra comprende l'inizio ed esclude la fine: un campione delle 10:05:00 ap
 
 Quando l'NMS sa già aggregare su un intervallo, il plugin usa la sua funzione invece di scaricare i campioni: per esempio `avg_over_time`, `min_over_time`, `max_over_time` e `rate` in PromQL per Prometheus. Il risultato deve comunque rispettare le regole sopra.
 
-Con OpenNMS il plugin legge dalla Measurements API i punti con aggregazione `AVERAGE`, con passo pari all'intervallo di raccolta, e ne calcola media, minimo e massimo. Non usa le aggregazioni `MIN` e `MAX`, perché i relativi archivi possono avere una risoluzione più grossolana della finestra.
+Con OpenNMS il plugin legge dalla Measurements API i punti con aggregazione `AVERAGE`, con passo pari all'intervallo con cui OpenNMS raccoglie i dati, e ne calcola media, minimo e massimo. Non usa le aggregazioni `MIN` e `MAX`, perché i relativi archivi possono avere una risoluzione più grossolana della finestra.
 
 ### 3.4 Raccolta e consolidamento
 
@@ -246,7 +246,7 @@ Gli endpoint descritti nel SAL4 (`/ianus/opennms/metrics/all`, `/ianus/prometheu
 }
 ```
 
-Nell'endpoint eventi l'array si chiama `events`. `complete` vale `false` quando l'NMS ha risposto solo in parte (per esempio un poller remoto irraggiungibile); i dati restituiti restano validi.
+Nell'endpoint eventi l'array si chiama `events`. `complete` vale `false` quando l'NMS ha risposto solo in parte (per esempio un poller remoto irraggiungibile) o quando un blocco della finestra manca o è incompleto (sezione 3.4); i dati restituiti restano validi.
 
 ### 7.4 Errori
 

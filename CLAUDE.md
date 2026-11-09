@@ -20,13 +20,13 @@ java -jar target/ianus-plugin-2.0.0-SNAPSHOT.jar --ianus.config=/path/ianus.yml
 docker build -t ianus-plugin:2.0.0 .               # after mvn package (copies target/*.jar)
 ```
 
-The app refuses to start without an external config file: the packaged `src/main/resources/application.yml` holds only a mandatory `spring.config.import` of `--ianus.config` / `IANUS_CONFIG` (default `/etc/ianus/ianus.yml`). `config/ianus-template.yml` is only the template to copy and fill in; it is not in the jar, so add new settings there. `ianus.api-key` is also required, and all sources are `enabled: false` in the template. OpenAPI at `/v3/api-docs` and `/swagger-ui.html` (no API key required).
+The app refuses to start without an external config file: the packaged `src/main/resources/application.yml` holds only a mandatory `spring.config.import` of `--ianus.config` / `IANUS_CONFIG` (default `/etc/ianus/ianus.yml`). `config/ianus-template.yml` is only the template to copy and fill in; it is not in the jar, so add new settings there. `ianus.api-key` is also required in that file (startup fails if blank), and all sources are `enabled: false` in the template. OpenAPI at `/v3/api-docs` and `/swagger-ui.html` (no API key required).
 
 ## Architecture
 
 Package root `it.infocube.ianus.plugin`.
 
-**Data flow:** one `core.collector.SourceCollector` per source reads aligned blocks through `SourceAdapter` every `collect-interval` (after `collect-delay`) and stores them in a `BlockStore`, recovering missing blocks in idle time; `Collectors` runs one thread per source and refuses invalid configuration at startup. **Request flow:** `web.IanusController` → `core.service.IanusService` → `BlockStore`: requests never reach an NMS, except `/ianus/v2/health`. `web.ApiKeyFilter` checks `X-API-Key`; Errors are subclasses of `core.error.IanusException`, which carries its own `HttpStatus` and `code` (`BadRequestException` 400, `SourceNotFoundException` 404, `SourceUnavailableException` 503); `web.ApiExceptionHandler` turns them into the `code`/`message` body. Throw one of these rather than adding new handlers.
+**Data flow:** one `core.collector.SourceCollector` per source reads aligned blocks through `SourceAdapter` every `collect-interval` (after `collect-delay`) and stores them in a `BlockStore`, recovering missing blocks in idle time; `Collectors` runs one thread per source and refuses invalid configuration at startup. **Request flow:** `web.IanusController` → `core.service.IanusService` → `BlockStore`: requests never reach an NMS, except `/ianus/v2/health`. `web.ApiKeyFilter` checks `X-API-Key`; Errors are subclasses of `core.error.IanusException`, which carries its own `HttpStatus` and `code` (`BadRequestException` 400, `SourceNotFoundException` 404, `SourceUnavailableException` 503, also via `noBlocks(source)` when a window has no collected block); `web.ApiExceptionHandler` turns them into the `code`/`message` body. Throw one of these rather than adding new handlers.
 
 **`IanusService` owns all source-independent logic** — adapters must not reimplement it:
 - resolves `window`/`end` into a `TimeWindow` via `WindowResolver` (windows aligned to multiples of their width, `[start, end)`, default = last completed window, unaligned/future `end` → 400);
@@ -41,6 +41,7 @@ Package root `it.infocube.ianus.plugin`.
 - `aggregation.EventAggregator` — groups `RawEvent`s by node, event id, instance and severity.
 - `severity.SeverityMapper` — native severities → INFO/WARNING/ERROR/CRITICAL (spec §6.1), native value preserved.
 - `buffer.SampleBuffer` / `EventBuffer` — in-memory retention for sources with no history API (Icinga polls on a `@Scheduled` interval; after restart, earlier windows are `complete: false`).
+- `util.RetryInterceptor` — every NMS client retries up to 3 times (200 ms, 1 s) on connection failure and 502/503/504, never on read timeout.
 - `util.Names` (metric names → lowercase snake_case, e.g. `ifHCInOctets` → `if_hc_in_octets`), `util.Times` (output always RFC 3339 UTC with `Z`; parses epoch/ISO/OpenNMS formats).
 
 Sources differ in where aggregation happens: Prometheus pushes it to the NMS (PromQL `*_over_time` evaluated at `end − 1ms`), OpenNMS fetches `AVERAGE` points from the Measurements API at `sample-step` and aggregates locally, Zabbix fetches raw `history.get` samples and aggregates locally, Icinga aggregates from its own buffer.
