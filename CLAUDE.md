@@ -20,7 +20,7 @@ java -jar target/ianus-plugin-2.0.0-SNAPSHOT.jar --ianus.config=/path/ianus.yml
 docker build -t ianus-plugin:2.0.0 .               # after mvn package (copies target/*.jar)
 ```
 
-The app refuses to start without an external config file: the packaged `src/main/resources/application.yml` holds only a mandatory `spring.config.import` of `--ianus.config` / `IANUS_CONFIG` (default `/etc/ianus/ianus.yml`). `config/ianus-template.yml` is only the template to copy and fill in; it is not in the jar, so add new settings there. `ianus.api-key` is also required in that file (startup fails if blank), and all sources are `enabled: false` in the template. OpenAPI at `/v3/api-docs` and `/swagger-ui.html` (no API key required).
+The app refuses to start without an external config file: the packaged `src/main/resources/application.yml` holds only a mandatory `spring.config.import` of `--ianus.config` / `IANUS_CONFIG` (default `/etc/ianus/ianus.yml`). `config/ianus-template.yml` is only the template to copy and fill in; it is not in the jar, so add new settings there. `ianus.api-key` is also required in that file (startup fails if blank), and all sources are `enabled: false` in the template. Invalid configuration fails at startup rather than at request time: `IanusProperties` requires `PT5M` and `PT30M` in `ianus.windows`, `PrometheusProperties.PromMetric` requires snake_case names, `Collectors` checks `collect-interval`/`collect-delay`/`retention`. OpenAPI at `/v3/api-docs` and `/swagger-ui.html` (no API key required).
 
 ## Architecture
 
@@ -39,10 +39,12 @@ Package root `it.infocube.ianus.plugin`.
 **Shared building blocks in `core`:**
 - `aggregation.Aggregator` / `Stats` / `MetricKind` — gauge mean/min/max and counter→rate conversion (counter resets are dropped, never negative rates); a known series with no samples is still returned with null values and `samples: 0`.
 - `aggregation.EventAggregator` — groups `RawEvent`s by node, event id, instance and severity.
-- `severity.SeverityMapper` — native severities → INFO/WARNING/ERROR/CRITICAL (spec §6.1), native value preserved.
+- `severity.SeverityMapper` — native severities → INFO/WARNING/ERROR/CRITICAL (spec §6.1), native value preserved; unknown or blank severities become WARNING and are logged once per source (blank is expected, and not logged, for Prometheus).
 - `buffer.SampleBuffer` / `EventBuffer` — in-memory retention for sources with no history API (Icinga polls on a `@Scheduled` interval; after restart, earlier windows are `complete: false`).
 - `util.RetryInterceptor` — every NMS client retries up to 3 times (200 ms, 1 s) on connection failure and 502/503/504, never on read timeout.
 - `util.Names` (metric names → lowercase snake_case, e.g. `ifHCInOctets` → `if_hc_in_octets`), `util.Times` (output always RFC 3339 UTC with `Z`; parses epoch/ISO/OpenNMS formats).
+
+Units: adapters convert to IANUS units (`percent`, `bytes`, `seconds`, `<unit>_per_second` for counters), scaling values when needed (Icinga and Zabbix divide `ms` by 1000); a missing unit is `none`, an unrecognised one passes through lowercased.
 
 Sources differ in where aggregation happens: Prometheus pushes it to the NMS (PromQL `*_over_time` evaluated at `end − 1ms`), OpenNMS fetches `AVERAGE` points from the Measurements API at `sample-step` and aggregates locally, Zabbix fetches raw `history.get` samples and aggregates locally, Icinga aggregates from its own buffer.
 
