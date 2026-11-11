@@ -4,7 +4,7 @@ import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
-/** status: UP se tutti gli NMS sono raggiungibili, altrimenti DEGRADED. */
+/** status: UP se tutti gli NMS sono raggiungibili e nessuna raccolta e' ferma, altrimenti DEGRADED. */
 public record HealthResponse(
         @JsonProperty(required = true) String status,
         @JsonProperty(value = "plugin_version", required = true) String pluginVersion,

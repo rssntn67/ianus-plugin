@@ -69,9 +69,11 @@ public final class EventAggregator {
         for (EventGroup g : groups) {
             Key key = new Key(g.node(), g.eventId(), g.instance(), g.severity());
             merged.merge(key, g, (a, b) -> {
-                boolean bIsLater = b.lastSeen().compareTo(a.lastSeen()) >= 0;
+                // confronto tra istanti: come testo "10:01:12Z" seguirebbe "10:01:12.500Z"
+                boolean bIsLater = !Instant.parse(b.lastSeen()).isBefore(Instant.parse(a.lastSeen()));
                 EventGroup later = bIsLater ? b : a;
-                String first = a.firstSeen().compareTo(b.firstSeen()) <= 0 ? a.firstSeen() : b.firstSeen();
+                String first = Instant.parse(a.firstSeen()).isAfter(Instant.parse(b.firstSeen()))
+                        ? b.firstSeen() : a.firstSeen();
                 return new EventGroup(a.node(), a.eventId(), a.instance(), a.severity(), later.nativeSeverity(),
                         a.count() + b.count(), first, later.lastSeen(), later.message(), later.labels(),
                         a.continued() + b.continued());

@@ -35,6 +35,26 @@ class EventAggregatorTest {
         assertThat(g.nativeSeverity()).isEqualTo("Major");
     }
 
+    @Test
+    void mergeComparesInstantsNotText() {
+        EventGroup whole = group("2026-10-14T10:01:12Z", "intero");
+        EventGroup fraction = group("2026-10-14T10:01:12.500Z", "frazione");
+
+        for (List<EventGroup> order : List.of(List.of(whole, fraction), List.of(fraction, whole))) {
+            assertThat(EventAggregator.merge(order)).singleElement().satisfies(g -> {
+                assertThat(g.count()).isEqualTo(2);
+                assertThat(g.firstSeen()).isEqualTo("2026-10-14T10:01:12Z");
+                assertThat(g.lastSeen()).isEqualTo("2026-10-14T10:01:12.500Z");
+                assertThat(g.message()).isEqualTo("frazione");
+            });
+        }
+    }
+
+    private static EventGroup group(String time, String message) {
+        return new EventGroup("router-core-1", "uei.opennms.org/nodes/interfaceDown", "Gigabit0/1",
+                Severity.ERROR, "Major", 1, time, time, message, Map.of());
+    }
+
     private static RawEvent event(Instant t, String message) {
         return new RawEvent("router-core-1", "uei.opennms.org/nodes/interfaceDown", "Gigabit0/1",
                 Severity.ERROR, "Major", t, message, Map.of());
