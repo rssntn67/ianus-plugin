@@ -176,8 +176,11 @@ public class ZabbixAdapter implements SourceAdapter {
         List<Map<String, Object>> events;
         try {
             events = Json.maps(client.call("event.get", params, true));
-        } catch (RestClientException | ZabbixException e) {
+        } catch (ResourceAccessException e) {
             throw new SourceUnavailableException(system(), e.getMessage());
+        } catch (RestClientException | ZabbixException e) {
+            LOG.warn("Zabbix event.get: eventi non letti: {}", e.getMessage());
+            return new SourceResult<>(List.of(), false);
         }
         List<RawEvent> raw = new ArrayList<>();
         for (Map<String, Object> ev : events) {

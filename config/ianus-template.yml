@@ -51,6 +51,8 @@ ianus:
       node-label: instance
       # Una serie senza campioni nella finestra esce con valori null se ne ha in questo periodo
       series-lookback: PT1H
+      # Etichette degli alert che compongono instance degli eventi, unite da "/" (es. [device])
+      alert-instance-labels: []
       # name: nome IANUS della metrica, in minuscolo con _ (altrimenti il plugin non parte)
       metrics:
         - name: cpu_usage

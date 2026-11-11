@@ -1,6 +1,7 @@
 package it.infocube.ianus.plugin.sources.zabbix;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -8,6 +9,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
+import it.infocube.ianus.plugin.core.error.SourceUnavailableException;
+import it.infocube.ianus.plugin.core.model.EventGroup;
 import it.infocube.ianus.plugin.core.model.MetricSeries;
 import it.infocube.ianus.plugin.core.model.RawEvent;
 import it.infocube.ianus.plugin.core.model.Severity;
@@ -194,6 +197,33 @@ class ZabbixAdapterTest {
 
         assertThat(client.historyCalls).isEqualTo(3);
         assertThat(result.complete()).isFalse();
+    }
+
+    private ZabbixAdapter failingEvents(RuntimeException failure) {
+        return new ZabbixAdapter(props, new ZabbixClient(props) {
+            @Override
+            public Object call(String method, Object params, boolean authenticated) {
+                throw failure;
+            }
+        }, Clock.systemUTC());
+    }
+
+    @Test
+    void httpOrApiErrorOnEventsGivesIncompleteEvents() {
+        for (RuntimeException failure : List.of(new HttpServerErrorException(HttpStatus.INTERNAL_SERVER_ERROR),
+                new ZabbixClient.ZabbixException("event.get: Session terminated"))) {
+            SourceResult<EventGroup> result = failingEvents(failure).events(WINDOW, QueryFilter.NONE);
+
+            assertThat(result.items()).isEmpty();
+            assertThat(result.complete()).isFalse();
+        }
+    }
+
+    @Test
+    void unreachableOnEventsIsUnavailable() {
+        assertThatThrownBy(() -> failingEvents(new ResourceAccessException("connessione rifiutata"))
+                .events(WINDOW, QueryFilter.NONE))
+                .isInstanceOf(SourceUnavailableException.class);
     }
 
     @Test

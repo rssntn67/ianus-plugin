@@ -39,7 +39,7 @@ import org.springframework.web.client.RestClientException;
  * counter-> avg/min/max/count_over_time(rate(sel[R])[W:S])
  * valutate a end - 1 ms, cosi' l'intervallo coincide con [start, end).
  * Le serie note sono quelle con campioni nell'ultimo series-lookback prima della fine della finestra.
- * Eventi: serie ALERTS{alertstate="firing"} campionata nella finestra.
+ * Eventi: serie ALERTS{alertstate="firing"} campionata nella finestra; instance dalle alert-instance-labels.
  */
 @Component
 @ConditionalOnProperty(prefix = "ianus.sources.prometheus", name = "enabled", havingValue = "true")
@@ -153,8 +153,11 @@ public class PrometheusAdapter implements SourceAdapter {
             // un passo prima della finestra, per sapere se l'alert era gia' attivo
             series = client.queryRange("ALERTS{alertstate=\"firing\"}", window.start().minus(props.alertStep()),
                     window.end().minusMillis(1), props.alertStep());
-        } catch (RestClientException e) {
+        } catch (ResourceAccessException e) {
             throw new SourceUnavailableException(system(), e.getMessage());
+        } catch (RestClientException e) {
+            LOG.warn("Prometheus: alert non letti: {}", e.getMessage());
+            return new SourceResult<>(List.of(), false);
         }
         double gap = props.alertStep().toMillis() / 1000.0 * 1.5;
         double windowStart = window.start().toEpochMilli() / 1000.0;
@@ -196,9 +199,12 @@ public class PrometheusAdapter implements SourceAdapter {
             String alertName = labels.getOrDefault("alertname", "");
             String nativeSeverity = labels.getOrDefault("severity", "");
             String node = labels.getOrDefault(props.nodeLabel(), "");
+            String instance = props.alertInstanceLabels().stream().map(l -> labels.getOrDefault(l, ""))
+                    .collect(Collectors.joining("/"));
             Map<String, String> rest = new TreeMap<>(labels);
             List.of("__name__", "alertname", "alertstate", "severity", props.nodeLabel()).forEach(rest::remove);
-            groups.add(new EventGroup(node, alertName, "", SeverityMapper.map("prometheus", nativeSeverity),
+            props.alertInstanceLabels().forEach(rest::remove);
+            groups.add(new EventGroup(node, alertName, instance, SeverityMapper.map("prometheus", nativeSeverity),
                     nativeSeverity, runs, Times.format(Times.fromEpochSeconds(first)),
                     Times.format(Times.fromEpochSeconds(last)), alertName, rest, continued));
         }

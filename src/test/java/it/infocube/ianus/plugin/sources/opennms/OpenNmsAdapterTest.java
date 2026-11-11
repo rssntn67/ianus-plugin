@@ -1,6 +1,7 @@
 package it.infocube.ianus.plugin.sources.opennms;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -8,6 +9,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
+import it.infocube.ianus.plugin.core.error.SourceUnavailableException;
+import it.infocube.ianus.plugin.core.model.EventGroup;
 import it.infocube.ianus.plugin.core.model.MetricSeries;
 import it.infocube.ianus.plugin.core.model.RawEvent;
 import it.infocube.ianus.plugin.core.model.Severity;
@@ -90,6 +93,31 @@ class OpenNmsAdapterTest {
                 .metrics(WINDOW, QueryFilter.NONE);
 
         assertThat(result.items()).extracting(MetricSeries::unit).containsOnly("none");
+    }
+
+    private OpenNmsAdapter failingEvents(RestClientException failure) {
+        return new OpenNmsAdapter(props, new OpenNmsClient(props) {
+            @Override
+            public Map<String, Object> events(String fiql, int offset, int limit) {
+                throw failure;
+            }
+        }, Clock.systemUTC());
+    }
+
+    @Test
+    void httpErrorOnEventsGivesIncompleteEvents() {
+        SourceResult<EventGroup> result = failingEvents(new HttpServerErrorException(HttpStatus.INTERNAL_SERVER_ERROR))
+                .events(WINDOW, QueryFilter.NONE);
+
+        assertThat(result.items()).isEmpty();
+        assertThat(result.complete()).isFalse();
+    }
+
+    @Test
+    void unreachableOnEventsIsUnavailable() {
+        assertThatThrownBy(() -> failingEvents(new ResourceAccessException("connessione rifiutata"))
+                .events(WINDOW, QueryFilter.NONE))
+                .isInstanceOf(SourceUnavailableException.class);
     }
 
     @Test

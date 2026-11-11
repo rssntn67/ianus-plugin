@@ -121,9 +121,12 @@ divide ogni finestra supportata, se `collect-delay` è negativo, se `retention` 
 - IANUS deve chiedere una finestra almeno `collect-delay` dopo la sua fine, altrimenti l'ultimo blocco non è ancora
   raccolto.
 - All'avvio e dopo un'interruzione il Collector recupera i blocchi mancanti dal più recente, nel tempo libero fra un
-  ciclo e l'altro. Un blocco incompleto viene riletto al massimo una volta per ciclo e 3 volte in tutto, e resta quello
-  già salvato finché non arriva una versione completa. Un blocco che fallisce con un errore imprevisto viene saltato
+  ciclo e l'altro. Un blocco incompleto viene riletto al massimo una volta per ciclo e 3 volte in tutto; ogni rilettura
+  sostituisce la versione salvata, mentre un blocco completo non viene più toccato. Un blocco che fallisce con un errore imprevisto viene saltato
   fino al ciclo successivo, così il recupero prosegue con i più vecchi, e dopo 3 errori viene abbandonato.
+- Solo una connessione fallita verso l'NMS conta come «NMS giù»: il blocco non viene salvato e il recupero si ferma
+  fino al ciclo successivo. Un errore HTTP o dell'API su una parte della lettura, metriche o eventi, dà un blocco
+  `complete: false` con i dati letti.
 - `capabilities` risponde con metriche e nodi dell'ultimo blocco, anche se l'NMS è giù. `history_depth` è la
   `retention`. `health` riporta `last_collected`, la fine dell'ultimo blocco raccolto, e risponde `DEGRADED` se un NMS
   non risponde o se una raccolta è ferma: l'ultimo blocco, o l'avvio se non ce n'è ancora uno, è più vecchio di due
@@ -164,7 +167,9 @@ contiene quanto letto fino a quel punto, con `complete: false`.
   Il nome IANUS va scritto in minuscolo con `_` (es. `cpu_usage`), altrimenti il plugin non parte. Senza `unit`
   l'unità è `none`.
 - **Eventi**: serie `ALERTS{alertstate="firing"}` campionata ogni `alert-step`; ogni periodo di attivazione conta
-  come un'occorrenza, anche se attraversa più blocchi.
+  come un'occorrenza, anche se attraversa più blocchi. `event_id` è `alertname`; `instance` è composta dalle
+  etichette in `alert-instance-labels`, unite da `/` (default nessuna: `instance` vuota). Senza di esse, alert con lo
+  stesso nome sullo stesso nodo ma su oggetti diversi (es. etichetta `device`) finiscono in un solo gruppo.
 
 ### Icinga 2
 - L'API REST di Icinga restituisce solo l'ultimo risultato di ogni controllo. Il plugin interroga

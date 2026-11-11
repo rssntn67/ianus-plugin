@@ -14,9 +14,12 @@ import it.infocube.ianus.plugin.core.model.EventGroup;
 import it.infocube.ianus.plugin.core.model.MetricSeries;
 import it.infocube.ianus.plugin.core.model.Severity;
 import it.infocube.ianus.plugin.core.source.QueryFilter;
+import it.infocube.ianus.plugin.core.source.SourceResult;
 import it.infocube.ianus.plugin.core.window.TimeWindow;
 import it.infocube.ianus.plugin.sources.prometheus.PrometheusProperties.PromMetric;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
 
 class PrometheusAdapterTest {
@@ -32,7 +35,7 @@ class PrometheusAdapterTest {
     private final PromMetric mem = new PromMetric("mem", "node_memory_MemAvailable_bytes{job=\"node\"}",
             null, null, null);
     private final PrometheusProperties props = new PrometheusProperties(true, null, "http://localhost:9",
-            null, null, null, null, null, false, null, null, null, null, null, List.of(traffic, cpu, mem));
+            null, null, null, null, null, false, null, null, null, null, null, null, List.of(traffic, cpu, mem));
 
     @Test
     void rangeExpressions() {
@@ -142,6 +145,61 @@ class PrometheusAdapterTest {
             assertThat(e.count()).isEqualTo(2);
             assertThat(e.firstSeen()).isEqualTo("2026-10-14T10:00:00Z");
             assertThat(e.lastSeen()).isEqualTo("2026-10-14T10:03:00Z");
+        });
+    }
+
+    @Test
+    void httpErrorOnAlertsGivesIncompleteEvents() {
+        PrometheusAdapter adapter = new PrometheusAdapter(props, new StubClient(props) {
+            @Override
+            public List<Map<String, Object>> queryRange(String expr, Instant start, Instant end, Duration step) {
+                throw new HttpServerErrorException(HttpStatus.INTERNAL_SERVER_ERROR);
+            }
+        });
+
+        SourceResult<EventGroup> result = adapter.events(WINDOW, QueryFilter.NONE);
+
+        assertThat(result.items()).isEmpty();
+        assertThat(result.complete()).isFalse();
+    }
+
+    @Test
+    void unreachableOnAlertsIsUnavailable() {
+        PrometheusAdapter adapter = new PrometheusAdapter(props, new StubClient(props) {
+            @Override
+            public List<Map<String, Object>> queryRange(String expr, Instant start, Instant end, Duration step) {
+                throw new ResourceAccessException("connessione rifiutata");
+            }
+        });
+
+        assertThatThrownBy(() -> adapter.events(WINDOW, QueryFilter.NONE))
+                .isInstanceOf(SourceUnavailableException.class);
+    }
+
+    @Test
+    void alertInstanceLabelsKeepAlertsOnDifferentObjectsApart() {
+        PrometheusProperties withDevice = new PrometheusProperties(true, null, "http://localhost:9", null, null,
+                null, null, null, false, null, null, null, null, List.of("device"), null, List.of());
+        PrometheusAdapter adapter = new PrometheusAdapter(withDevice, new StubClient(withDevice) {
+            @Override
+            public List<Map<String, Object>> queryRange(String expr, Instant start, Instant end, Duration step) {
+                double t0 = T0.getEpochSecond();
+                return List.of(alert("eth0", t0), alert("eth1", t0));
+            }
+
+            private Map<String, Object> alert(String device, double t) {
+                return Map.of("metric", Map.of("alertname", "LinkDown", "instance", "srv-1:9100",
+                                "device", device, "job", "node"),
+                        "values", List.<Object>of(List.<Object>of(t, "1")));
+            }
+        });
+
+        List<EventGroup> events = adapter.events(WINDOW, QueryFilter.NONE).items();
+
+        assertThat(events).extracting(EventGroup::instance).containsExactly("eth0", "eth1");
+        assertThat(events).allSatisfy(e -> {
+            assertThat(e.count()).isEqualTo(1);
+            assertThat(e.labels()).containsEntry("job", "node").doesNotContainKey("device");
         });
     }
 

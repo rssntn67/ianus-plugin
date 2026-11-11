@@ -110,9 +110,9 @@ class BlockStoreTest {
     }
 
     @Test
-    void incompleteBlockDoesNotReplaceIncompleteOne() {
-        store.put(block(0, false, series()));
+    void rereadIncompleteBlockReplacesIncompleteOne() {
         store.put(block(0, false));
+        store.put(block(0, false, series()));
 
         assertThat(store.get(at(0))).hasValueSatisfying(b -> assertThat(b.metrics()).hasSize(1));
     }

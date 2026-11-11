@@ -176,7 +176,7 @@ public class OpenNmsAdapter implements SourceAdapter {
             try {
                 response = client.events(fiql, offset, EVENT_PAGE);
             } catch (RestClientException e) {
-                if (pages == 0) {
+                if (pages == 0 && e instanceof ResourceAccessException) {
                     throw new SourceUnavailableException(system(), e.getMessage());
                 }
                 LOG.warn("Eventi OpenNMS: pagina {} non letta: {}", pages, e.getMessage());

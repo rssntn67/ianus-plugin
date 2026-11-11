@@ -73,9 +73,10 @@ public class BlockStore {
         return interval;
     }
 
-    /** Salva il blocco; uno gia' presente viene sostituito solo da una versione completa. */
+    /** Salva il blocco; una rilettura sostituisce quello gia' presente, tranne una incompleta su uno completo. */
     public synchronized void put(Block block) {
-        if (block.complete() || !blocks.containsKey(block.start())) {
+        Stored existing = blocks.get(block.start());
+        if (block.complete() || existing == null || !existing.complete()) {
             blocks.put(block.start(), store(block));
         }
         prune();
