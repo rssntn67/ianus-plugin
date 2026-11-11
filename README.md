@@ -121,12 +121,15 @@ divide ogni finestra supportata, se `collect-delay` è negativo, se `retention` 
 - IANUS deve chiedere una finestra almeno `collect-delay` dopo la sua fine, altrimenti l'ultimo blocco non è ancora
   raccolto.
 - All'avvio e dopo un'interruzione il Collector recupera i blocchi mancanti dal più recente, nel tempo libero fra un
-  ciclo e l'altro. Un blocco incompleto viene riletto al massimo una volta per ciclo e 3 volte in tutto; ogni rilettura
-  sostituisce la versione salvata, mentre un blocco completo non viene più toccato. Un blocco che fallisce con un errore imprevisto viene saltato
-  fino al ciclo successivo, così il recupero prosegue con i più vecchi, e dopo 3 errori viene abbandonato.
-- Solo una connessione fallita verso l'NMS conta come «NMS giù»: il blocco non viene salvato e il recupero si ferma
-  fino al ciclo successivo. Un errore HTTP o dell'API su una parte della lettura, metriche o eventi, dà un blocco
-  `complete: false` con i dati letti.
+  ciclo e l'altro. Un blocco incompleto viene riletto al massimo una volta per ciclo e 3 volte in tutto; ogni
+  rilettura sostituisce la versione salvata, mentre un blocco completo non viene più toccato. Un blocco che fallisce
+  con un errore imprevisto viene saltato fino al ciclo successivo, così il recupero prosegue con i più vecchi, e dopo
+  3 errori viene abbandonato.
+- Se l'NMS risulta giù il blocco non viene salvato e il recupero si ferma fino al ciclo successivo. L'NMS risulta giù
+  quando la connessione fallisce (per OpenNMS e Zabbix solo prima di aver letto un lotto di metriche). Per OpenNMS e
+  Zabbix risulta giù anche quando falliscono tutti i lotti di metriche o la prima lettura dell'inventario. Un errore
+  HTTP o dell'API su una parte della lettura, metriche o eventi, dà invece un blocco `complete: false` con i dati
+  letti.
 - `capabilities` risponde con metriche e nodi dell'ultimo blocco, anche se l'NMS è giù. `history_depth` è la
   `retention`. `health` riporta `last_collected`, la fine dell'ultimo blocco raccolto, e risponde `DEGRADED` se un NMS
   non risponde o se una raccolta è ferma: l'ultimo blocco, o l'avvio se non ce n'è ancora uno, è più vecchio di due
