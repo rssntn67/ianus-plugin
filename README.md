@@ -123,8 +123,9 @@ divide ogni finestra supportata, se `collect-delay` è negativo, se `retention` 
 - All'avvio e dopo un'interruzione il Collector recupera i blocchi mancanti dal più recente, nel tempo libero fra un
   ciclo e l'altro. Un blocco incompleto viene riletto al massimo una volta per ciclo e 3 volte in tutto; ogni
   rilettura sostituisce la versione salvata, mentre un blocco completo non viene più toccato. Un blocco che fallisce
-  con un errore imprevisto viene saltato fino al ciclo successivo, così il recupero prosegue con i più vecchi, e dopo
-  3 errori viene abbandonato.
+  con un errore diverso dall'NMS giù (un errore imprevisto, o un errore HTTP o dell'API che impedisce tutta la
+  lettura) viene saltato fino al ciclo successivo, così il recupero prosegue con i più vecchi, e dopo 3 errori viene
+  abbandonato.
 - Se l'NMS risulta giù il blocco non viene salvato e il recupero si ferma fino al ciclo successivo. L'NMS risulta giù
   quando la connessione fallisce o risponde 502, 503 o 504 anche dopo i nuovi tentativi; per OpenNMS e Zabbix solo
   se non è stato letto nessun lotto di metriche, oppure sulla prima lettura dell'inventario. Un altro errore HTTP o

@@ -261,7 +261,7 @@ Il corpo dell'errore contiene almeno `code` e `message`.
 
 ## 8. Requisiti operativi dei plugin
 
-La scheda OR8 chiede plugin resilienti e tolleranti alla perdita di connessione. Questo si ottiene rendendo ogni finestra richiedibile anche dopo: se IANUS perde una o più chiamate, le ripete in seguito indicando `end`, e il plugin le serve entro la profondità storica. Dopo un riavvio o un'interruzione il Collector recupera da solo i blocchi mancanti, finché l'NMS li conserva; un blocco che continua a fallire per un errore imprevisto viene abbandonato dopo 3 tentativi, senza fermare il recupero degli altri.
+La scheda OR8 chiede plugin resilienti e tolleranti alla perdita di connessione. Questo si ottiene rendendo ogni finestra richiedibile anche dopo: se IANUS perde una o più chiamate, le ripete in seguito indicando `end`, e il plugin le serve entro la profondità storica. Dopo un riavvio o un'interruzione il Collector recupera da solo i blocchi mancanti, finché l'NMS li conserva; un blocco che continua a fallire per un errore diverso dall'NMS irraggiungibile (per esempio credenziali errate o una risposta non valida) viene abbandonato dopo 3 tentativi, senza fermare il recupero degli altri; con l'NMS irraggiungibile il recupero riprende quando torna disponibile.
 
 - **Profondità storica.** È la `retention` del plugin, configurabile con default di 3 ore, dichiarata in `capabilities`. I dati stanno in memoria: dopo un riavvio tornano disponibili man mano che il Collector li recupera.
 - **Idempotenza.** La stessa richiesta (sorgente, finestra, filtri) restituisce sempre lo stesso risultato, salvo blocchi recuperati nel frattempo. I dati arrivati all'NMS dopo la lettura di un blocco completo non vengono visti.
