@@ -38,7 +38,7 @@ Package root `it.infocube.ianus.plugin`.
 
 **Shared building blocks in `core`:**
 - `aggregation.Aggregator` / `Stats` / `MetricKind` — gauge mean/min/max and counter→rate conversion (counter resets are dropped, never negative rates); a known series with no samples is still returned with null values and `samples: 0`.
-- `aggregation.EventAggregator` — groups `RawEvent`s by node, event id, instance and severity.
+- `aggregation.EventAggregator` — groups `RawEvent`s by node, event id, instance and severity; `merge` combines already-grouped events (`Consolidator` across blocks, Prometheus), comparing first/last seen as instants.
 - `severity.SeverityMapper` — native severities → INFO/WARNING/ERROR/CRITICAL (spec §6.1), native value preserved; unknown or blank severities become WARNING and are logged once per source (blank is expected, and not logged, for Prometheus).
 - `buffer.SampleBuffer` / `EventBuffer` — in-memory retention for sources with no history API (Icinga polls on a `@Scheduled` interval; after restart, earlier windows are `complete: false`).
 - `util.RetryInterceptor` — every NMS client retries up to 3 times (200 ms, 1 s) on connection failure and 502/503/504, never on read timeout.

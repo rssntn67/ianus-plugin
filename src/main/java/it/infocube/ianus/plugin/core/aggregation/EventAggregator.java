@@ -63,7 +63,7 @@ public final class EventAggregator {
         return out;
     }
 
-    /** Fonde gruppi gia' calcolati che condividono la stessa chiave (usato da Prometheus). */
+    /** Fonde gruppi gia' calcolati che condividono la stessa chiave (usato da Consolidator tra i blocchi e da Prometheus). */
     public static List<EventGroup> merge(Collection<EventGroup> groups) {
         Map<Key, EventGroup> merged = new LinkedHashMap<>();
         for (EventGroup g : groups) {
