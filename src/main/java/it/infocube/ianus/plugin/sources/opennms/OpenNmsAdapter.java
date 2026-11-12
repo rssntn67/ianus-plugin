@@ -21,6 +21,7 @@ import it.infocube.ianus.plugin.core.severity.SeverityMapper;
 import it.infocube.ianus.plugin.core.source.QueryFilter;
 import it.infocube.ianus.plugin.core.source.SourceAdapter;
 import it.infocube.ianus.plugin.core.source.SourceResult;
+import it.infocube.ianus.plugin.core.util.HttpClients;
 import it.infocube.ianus.plugin.core.util.Json;
 import it.infocube.ianus.plugin.core.util.Names;
 import it.infocube.ianus.plugin.core.util.Times;
@@ -30,7 +31,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientException;
 
 /**
@@ -87,25 +87,30 @@ public class OpenNmsAdapter implements SourceAdapter {
         Map<SeriesRef, List<Sample>> samples = new HashMap<>();
         int batches = 0;
         int failures = 0;
+        boolean unreachable = false;
         RestClientException last = null;
         for (int i = 0; i < refs.size(); i += props.batchSize()) {
             List<SeriesRef> chunk = refs.subList(i, Math.min(i + props.batchSize(), refs.size()));
             batches++;
             try {
                 fetch(chunk, window, samples);
-            } catch (ResourceAccessException e) {
-                failures++;
-                last = e;
-                LOG.warn("Measurements API: OpenNMS non raggiungibile, lettura interrotta: {}", e.getMessage());
-                break;
             } catch (RestClientException e) {
                 failures++;
                 last = e;
+                if (HttpClients.unreachable(e)) {
+                    unreachable = true;
+                    LOG.warn("Measurements API: OpenNMS non raggiungibile, lettura interrotta: {}", e.getMessage());
+                    break;
+                }
                 LOG.warn("Measurements API: lotto di {} attributi non letto: {}", chunk.size(), e.getMessage());
             }
         }
         if (batches > 0 && failures == batches) {
-            throw new SourceUnavailableException(system(), last.getMessage());
+            // nessun lotto letto: NMS giu', altrimenti un errore che conta sul blocco
+            if (unreachable) {
+                throw new SourceUnavailableException(system(), last.getMessage());
+            }
+            throw last;
         }
         List<MetricSeries> out = refs.stream()
                 .map(r -> MetricSeries.of(r.node(), r.metric(), r.instance(), r.unit(),
@@ -176,7 +181,7 @@ public class OpenNmsAdapter implements SourceAdapter {
             try {
                 response = client.events(fiql, offset, EVENT_PAGE);
             } catch (RestClientException e) {
-                if (pages == 0 && e instanceof ResourceAccessException) {
+                if (pages == 0 && HttpClients.unreachable(e)) {
                     throw new SourceUnavailableException(system(), e.getMessage());
                 }
                 LOG.warn("Eventi OpenNMS: pagina {} non letta: {}", pages, e.getMessage());
@@ -254,7 +259,10 @@ public class OpenNmsAdapter implements SourceAdapter {
                     LOG.warn("Rilettura dell'inventario OpenNMS fallita, uso quello precedente: {}", e.getMessage());
                     return inv;
                 }
-                throw new SourceUnavailableException(system(), e.getMessage());
+                if (HttpClients.unreachable(e)) {
+                    throw new SourceUnavailableException(system(), e.getMessage());
+                }
+                throw e;
             }
         }
     }

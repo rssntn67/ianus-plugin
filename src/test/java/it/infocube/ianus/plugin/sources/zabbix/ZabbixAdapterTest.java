@@ -27,13 +27,21 @@ class ZabbixAdapterTest {
 
     private static final Instant T0 = Instant.parse("2026-10-14T10:00:00Z");
     private static final TimeWindow WINDOW = new TimeWindow(T0, T0.plusSeconds(300), Duration.ofMinutes(5));
+    /** Errori con cui l'NMS risulta giu': connessione fallita o 502/503/504 dopo i nuovi tentativi. */
+    private static final List<RestClientException> UNREACHABLE = List.of(
+            new ResourceAccessException("connessione rifiutata"),
+            new HttpServerErrorException(HttpStatus.SERVICE_UNAVAILABLE));
+    /** Errori HTTP o dell'API che non indicano un NMS giu'. */
+    private static final List<RuntimeException> ERRORS = List.of(
+            new HttpServerErrorException(HttpStatus.INTERNAL_SERVER_ERROR),
+            new ZabbixClient.ZabbixException("Not authorised."));
 
     /** Due item float e uno intero, letti uno per lotto; il secondo lotto fallisce con l'errore indicato. */
-    private static final class FailingClient extends ZabbixClient {
-        final RestClientException failure;
+    private static class FailingClient extends ZabbixClient {
+        final RuntimeException failure;
         int historyCalls;
 
-        FailingClient(ZabbixProperties props, RestClientException failure) {
+        FailingClient(ZabbixProperties props, RuntimeException failure) {
             super(props);
             this.failure = failure;
         }
@@ -199,6 +207,51 @@ class ZabbixAdapterTest {
         assertThat(result.complete()).isFalse();
     }
 
+    /** Inventario con tre item; ogni history.get fallisce. */
+    private ZabbixAdapter failingHistory(RuntimeException failure) {
+        return new ZabbixAdapter(props, new FailingClient(props, failure) {
+            @Override
+            public Object call(String method, Object params, boolean authenticated) {
+                if ("item.get".equals(method)) {
+                    return super.call(method, params, authenticated);
+                }
+                throw failure;
+            }
+        }, Clock.systemUTC());
+    }
+
+    @Test
+    void httpOrApiErrorOnEveryBatchCountsAsErrorOnTheBlock() {
+        for (RuntimeException failure : ERRORS) {
+            assertThatThrownBy(() -> failingHistory(failure).metrics(WINDOW, QueryFilter.NONE))
+                    .isSameAs(failure);
+        }
+    }
+
+    @Test
+    void unreachableOnEveryBatchIsUnavailable() {
+        for (RuntimeException failure : UNREACHABLE) {
+            assertThatThrownBy(() -> failingHistory(failure).metrics(WINDOW, QueryFilter.NONE))
+                    .isInstanceOf(SourceUnavailableException.class);
+        }
+    }
+
+    @Test
+    void httpOrApiErrorOnFirstInventoryCountsAsErrorOnTheBlock() {
+        for (RuntimeException failure : ERRORS) {
+            assertThatThrownBy(() -> failingEvents(failure).metrics(WINDOW, QueryFilter.NONE))
+                    .isSameAs(failure);
+        }
+    }
+
+    @Test
+    void unreachableOnFirstInventoryIsUnavailable() {
+        for (RuntimeException failure : UNREACHABLE) {
+            assertThatThrownBy(() -> failingEvents(failure).metrics(WINDOW, QueryFilter.NONE))
+                    .isInstanceOf(SourceUnavailableException.class);
+        }
+    }
+
     private ZabbixAdapter failingEvents(RuntimeException failure) {
         return new ZabbixAdapter(props, new ZabbixClient(props) {
             @Override
@@ -221,9 +274,10 @@ class ZabbixAdapterTest {
 
     @Test
     void unreachableOnEventsIsUnavailable() {
-        assertThatThrownBy(() -> failingEvents(new ResourceAccessException("connessione rifiutata"))
-                .events(WINDOW, QueryFilter.NONE))
-                .isInstanceOf(SourceUnavailableException.class);
+        for (RuntimeException failure : UNREACHABLE) {
+            assertThatThrownBy(() -> failingEvents(failure).events(WINDOW, QueryFilter.NONE))
+                    .isInstanceOf(SourceUnavailableException.class);
+        }
     }
 
     @Test

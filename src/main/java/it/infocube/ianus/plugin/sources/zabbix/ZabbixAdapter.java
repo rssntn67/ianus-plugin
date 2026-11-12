@@ -23,6 +23,7 @@ import it.infocube.ianus.plugin.core.severity.SeverityMapper;
 import it.infocube.ianus.plugin.core.source.QueryFilter;
 import it.infocube.ianus.plugin.core.source.SourceAdapter;
 import it.infocube.ianus.plugin.core.source.SourceResult;
+import it.infocube.ianus.plugin.core.util.HttpClients;
 import it.infocube.ianus.plugin.core.util.Json;
 import it.infocube.ianus.plugin.core.util.Names;
 import it.infocube.ianus.plugin.core.window.TimeWindow;
@@ -32,7 +33,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientException;
 
 /**
@@ -92,6 +92,7 @@ public class ZabbixAdapter implements SourceAdapter {
         boolean complete = true;
         int calls = 0;
         int failures = 0;
+        boolean unreachable = false;
         RuntimeException last = null;
         batches:
         for (int valueType : new int[] {0, 3}) {
@@ -106,24 +107,27 @@ public class ZabbixAdapter implements SourceAdapter {
                     calls++;
                     try {
                         history(valueType, chunk, timeFrom, window, samples);
-                    } catch (ResourceAccessException e) {
-                        failures++;
-                        last = e;
-                        complete = false;
-                        LOG.warn("Zabbix history.get: Zabbix non raggiungibile, lettura interrotta: {}",
-                                e.getMessage());
-                        break batches;
                     } catch (RestClientException | ZabbixException e) {
                         failures++;
                         last = e;
                         complete = false;
+                        if (HttpClients.unreachable(e)) {
+                            unreachable = true;
+                            LOG.warn("Zabbix history.get: Zabbix non raggiungibile, lettura interrotta: {}",
+                                    e.getMessage());
+                            break batches;
+                        }
                         LOG.warn("Zabbix history.get: lotto di {} item non letto: {}", chunk.size(), e.getMessage());
                     }
                 }
             }
         }
         if (calls > 0 && failures == calls) {
-            throw new SourceUnavailableException(system(), last.getMessage());
+            // nessun lotto letto: NMS giu', altrimenti un errore che conta sul blocco
+            if (unreachable) {
+                throw new SourceUnavailableException(system(), last.getMessage());
+            }
+            throw last;
         }
         List<MetricSeries> out = items.stream()
                 .map(i -> MetricSeries.of(i.node(), i.metric(), i.instance(), i.unit(),
@@ -176,9 +180,10 @@ public class ZabbixAdapter implements SourceAdapter {
         List<Map<String, Object>> events;
         try {
             events = Json.maps(client.call("event.get", params, true));
-        } catch (ResourceAccessException e) {
-            throw new SourceUnavailableException(system(), e.getMessage());
         } catch (RestClientException | ZabbixException e) {
+            if (HttpClients.unreachable(e)) {
+                throw new SourceUnavailableException(system(), e.getMessage());
+            }
             LOG.warn("Zabbix event.get: eventi non letti: {}", e.getMessage());
             return new SourceResult<>(List.of(), false);
         }
@@ -240,7 +245,10 @@ public class ZabbixAdapter implements SourceAdapter {
                     LOG.warn("Rilettura degli item Zabbix fallita, uso l'elenco precedente: {}", e.getMessage());
                     return inv;
                 }
-                throw new SourceUnavailableException(system(), e.getMessage());
+                if (HttpClients.unreachable(e)) {
+                    throw new SourceUnavailableException(system(), e.getMessage());
+                }
+                throw e;
             }
         }
     }

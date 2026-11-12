@@ -19,6 +19,7 @@ import it.infocube.ianus.plugin.core.source.SourceResult;
 import it.infocube.ianus.plugin.core.window.TimeWindow;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientException;
@@ -27,9 +28,13 @@ class OpenNmsAdapterTest {
 
     private static final Instant T0 = Instant.parse("2026-10-14T10:00:00Z");
     private static final TimeWindow WINDOW = new TimeWindow(T0, T0.plusSeconds(300), Duration.ofMinutes(5));
+    /** Errori con cui l'NMS risulta giu': connessione fallita o 502/503/504 dopo i nuovi tentativi. */
+    private static final List<RestClientException> UNREACHABLE = List.of(
+            new ResourceAccessException("connessione rifiutata"),
+            new HttpServerErrorException(HttpStatus.SERVICE_UNAVAILABLE));
 
     /** Tre attributi letti uno per lotto; il secondo lotto fallisce con l'errore indicato. */
-    private static final class FailingClient extends OpenNmsClient {
+    private static class FailingClient extends OpenNmsClient {
         final RestClientException failure;
         int calls;
 
@@ -95,6 +100,55 @@ class OpenNmsAdapterTest {
         assertThat(result.items()).extracting(MetricSeries::unit).containsOnly("none");
     }
 
+    /** Inventario con tre attributi; ogni lettura delle misure fallisce. */
+    private OpenNmsAdapter failingMeasurements(RestClientException failure) {
+        return new OpenNmsAdapter(props, new FailingClient(props, failure) {
+            @Override
+            public Map<String, Object> measurements(Map<String, Object> request) {
+                throw failure;
+            }
+        }, Clock.systemUTC());
+    }
+
+    @Test
+    void httpErrorOnEveryBatchCountsAsErrorOnTheBlock() {
+        assertThatThrownBy(() -> failingMeasurements(new HttpServerErrorException(HttpStatus.INTERNAL_SERVER_ERROR))
+                .metrics(WINDOW, QueryFilter.NONE))
+                .isInstanceOf(HttpServerErrorException.class);
+    }
+
+    @Test
+    void unreachableOnEveryBatchIsUnavailable() {
+        for (RestClientException failure : UNREACHABLE) {
+            assertThatThrownBy(() -> failingMeasurements(failure).metrics(WINDOW, QueryFilter.NONE))
+                    .isInstanceOf(SourceUnavailableException.class);
+        }
+    }
+
+    private OpenNmsAdapter failingInventory(RestClientException failure) {
+        return new OpenNmsAdapter(props, new OpenNmsClient(props) {
+            @Override
+            public List<Map<String, Object>> nodes() {
+                throw failure;
+            }
+        }, Clock.systemUTC());
+    }
+
+    @Test
+    void httpErrorOnFirstInventoryCountsAsErrorOnTheBlock() {
+        assertThatThrownBy(() -> failingInventory(new HttpClientErrorException(HttpStatus.UNAUTHORIZED))
+                .metrics(WINDOW, QueryFilter.NONE))
+                .isInstanceOf(HttpClientErrorException.class);
+    }
+
+    @Test
+    void unreachableOnFirstInventoryIsUnavailable() {
+        for (RestClientException failure : UNREACHABLE) {
+            assertThatThrownBy(() -> failingInventory(failure).metrics(WINDOW, QueryFilter.NONE))
+                    .isInstanceOf(SourceUnavailableException.class);
+        }
+    }
+
     private OpenNmsAdapter failingEvents(RestClientException failure) {
         return new OpenNmsAdapter(props, new OpenNmsClient(props) {
             @Override
@@ -115,9 +169,10 @@ class OpenNmsAdapterTest {
 
     @Test
     void unreachableOnEventsIsUnavailable() {
-        assertThatThrownBy(() -> failingEvents(new ResourceAccessException("connessione rifiutata"))
-                .events(WINDOW, QueryFilter.NONE))
-                .isInstanceOf(SourceUnavailableException.class);
+        for (RestClientException failure : UNREACHABLE) {
+            assertThatThrownBy(() -> failingEvents(failure).events(WINDOW, QueryFilter.NONE))
+                    .isInstanceOf(SourceUnavailableException.class);
+        }
     }
 
     @Test

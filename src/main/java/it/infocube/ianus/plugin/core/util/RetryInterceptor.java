@@ -6,7 +6,6 @@ import java.net.http.HttpConnectTimeoutException;
 import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.util.List;
-import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,7 +23,6 @@ final class RetryInterceptor implements ClientHttpRequestInterceptor {
 
     private static final Logger LOG = LoggerFactory.getLogger(RetryInterceptor.class);
     private static final List<Duration> WAITS = List.of(Duration.ofMillis(200), Duration.ofSeconds(1));
-    private static final Set<Integer> TEMPORARY = Set.of(502, 503, 504);
 
     @Override
     public ClientHttpResponse intercept(HttpRequest request, byte[] body, ClientHttpRequestExecution execution)
@@ -32,7 +30,7 @@ final class RetryInterceptor implements ClientHttpRequestInterceptor {
         for (Duration wait : WAITS) {
             try {
                 ClientHttpResponse response = execution.execute(request, body);
-                if (!TEMPORARY.contains(response.getStatusCode().value())) {
+                if (!HttpClients.TEMPORARY.contains(response.getStatusCode().value())) {
                     return response;
                 }
                 LOG.debug("{} {}: risposta {}, nuovo tentativo", request.getMethod(), request.getURI(),

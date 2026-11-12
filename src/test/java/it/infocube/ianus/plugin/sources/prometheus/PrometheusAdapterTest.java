@@ -165,15 +165,18 @@ class PrometheusAdapterTest {
 
     @Test
     void unreachableOnAlertsIsUnavailable() {
-        PrometheusAdapter adapter = new PrometheusAdapter(props, new StubClient(props) {
-            @Override
-            public List<Map<String, Object>> queryRange(String expr, Instant start, Instant end, Duration step) {
-                throw new ResourceAccessException("connessione rifiutata");
-            }
-        });
+        for (RuntimeException failure : List.of(new ResourceAccessException("connessione rifiutata"),
+                new HttpServerErrorException(HttpStatus.SERVICE_UNAVAILABLE))) {
+            PrometheusAdapter adapter = new PrometheusAdapter(props, new StubClient(props) {
+                @Override
+                public List<Map<String, Object>> queryRange(String expr, Instant start, Instant end, Duration step) {
+                    throw failure;
+                }
+            });
 
-        assertThatThrownBy(() -> adapter.events(WINDOW, QueryFilter.NONE))
-                .isInstanceOf(SourceUnavailableException.class);
+            assertThatThrownBy(() -> adapter.events(WINDOW, QueryFilter.NONE))
+                    .isInstanceOf(SourceUnavailableException.class);
+        }
     }
 
     @Test

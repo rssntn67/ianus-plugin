@@ -126,10 +126,11 @@ divide ogni finestra supportata, se `collect-delay` è negativo, se `retention` 
   con un errore imprevisto viene saltato fino al ciclo successivo, così il recupero prosegue con i più vecchi, e dopo
   3 errori viene abbandonato.
 - Se l'NMS risulta giù il blocco non viene salvato e il recupero si ferma fino al ciclo successivo. L'NMS risulta giù
-  quando la connessione fallisce (per OpenNMS e Zabbix solo prima di aver letto un lotto di metriche). Per OpenNMS e
-  Zabbix risulta giù anche quando falliscono tutti i lotti di metriche o la prima lettura dell'inventario. Un errore
-  HTTP o dell'API su una parte della lettura, metriche o eventi, dà invece un blocco `complete: false` con i dati
-  letti.
+  quando la connessione fallisce o risponde 502, 503 o 504 anche dopo i nuovi tentativi; per OpenNMS e Zabbix solo
+  se non è stato letto nessun lotto di metriche, oppure sulla prima lettura dell'inventario. Un altro errore HTTP o
+  dell'API su una parte della lettura, metriche o eventi, dà invece un blocco `complete: false` con i dati letti; su
+  tutti i lotti di metriche di OpenNMS e Zabbix, o sulla prima lettura dell'inventario, conta come errore sul blocco
+  (per esempio credenziali errate).
 - `capabilities` risponde con metriche e nodi dell'ultimo blocco, anche se l'NMS è giù. `history_depth` è la
   `retention`. `health` riporta `last_collected`, la fine dell'ultimo blocco raccolto, e risponde `DEGRADED` se un NMS
   non risponde o se una raccolta è ferma: l'ultimo blocco, o l'avvio se non ce n'è ancora uno, è più vecchio di due
@@ -143,8 +144,8 @@ divide ogni finestra supportata, se `collect-delay` è negativo, se `retention` 
 
 Verso tutti gli NMS il plugin fa fino a 3 tentativi, con attese di 200 ms e 1 secondo, su connessione
 fallita e su risposte 502, 503, 504. Il timeout di lettura e gli altri errori HTTP non si ripetono.
-Se la connessione cade durante la lettura a lotti di OpenNMS e Zabbix, la lettura si ferma e la risposta
-contiene quanto letto fino a quel punto, con `complete: false`.
+Se durante la lettura a lotti di OpenNMS e Zabbix la connessione cade o l'NMS risponde 502, 503 o 504, la
+lettura si ferma e il blocco contiene quanto letto fino a quel punto, con `complete: false`.
 
 ### OpenNMS
 - **Metriche**: Measurements API (`POST /rest/measurements`) sugli attributi dei grafici dei nodi
@@ -155,6 +156,10 @@ contiene quanto letto fino a quel punto, con `complete: false`.
 - `ianus.retention` non deve superare il periodo conservato a piena risoluzione: oltre, i punti recuperati
   sono già mediati su intervalli più lunghi e minimo e massimo perdono i picchi.
 - I DS di tipo COUNTER sono già restituiti come tassi da OpenNMS, quindi si aggregano come gauge.
+  L'azzeramento di un contatore lo gestisce quindi l'archivio di OpenNMS, non il plugin: RRDtool lo tratta come
+  un wrap e, se il DS non ha un massimo, ne ricava un tasso enorme invece di scartarlo. Per rispettare la regola
+  della specifica (sezione 3.3) i DS contatore vanno raccolti con un massimo (`maxval` nella configurazione della
+  raccolta di OpenNMS), così il punto con l'azzeramento diventa vuoto e il plugin lo ignora.
 - OpenNMS non espone l'unità di misura: si configura per attributo in `units` (altrimenti `none`).
 - **Eventi**: `GET /api/v2/events` con filtro FIQL su `eventTime`.
 

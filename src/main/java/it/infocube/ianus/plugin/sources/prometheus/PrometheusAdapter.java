@@ -21,6 +21,7 @@ import it.infocube.ianus.plugin.core.severity.SeverityMapper;
 import it.infocube.ianus.plugin.core.source.QueryFilter;
 import it.infocube.ianus.plugin.core.source.SourceAdapter;
 import it.infocube.ianus.plugin.core.source.SourceResult;
+import it.infocube.ianus.plugin.core.util.HttpClients;
 import it.infocube.ianus.plugin.core.util.Json;
 import it.infocube.ianus.plugin.core.util.Times;
 import it.infocube.ianus.plugin.core.window.TimeWindow;
@@ -30,7 +31,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientException;
 
 /**
@@ -95,9 +95,10 @@ public class PrometheusAdapter implements SourceAdapter {
                     out.add(toSeries(m, labels, samples == 0 ? null : avg.get(key),
                             samples == 0 ? null : min.get(key), samples == 0 ? null : max.get(key), samples));
                 });
-            } catch (ResourceAccessException e) {
-                throw new SourceUnavailableException(system(), e.getMessage());
             } catch (RestClientException e) {
+                if (HttpClients.unreachable(e)) {
+                    throw new SourceUnavailableException(system(), e.getMessage());
+                }
                 complete = false;
                 LOG.warn("Prometheus: metrica {} non letta: {}", m.name(), e.getMessage());
             }
@@ -153,9 +154,10 @@ public class PrometheusAdapter implements SourceAdapter {
             // un passo prima della finestra, per sapere se l'alert era gia' attivo
             series = client.queryRange("ALERTS{alertstate=\"firing\"}", window.start().minus(props.alertStep()),
                     window.end().minusMillis(1), props.alertStep());
-        } catch (ResourceAccessException e) {
-            throw new SourceUnavailableException(system(), e.getMessage());
         } catch (RestClientException e) {
+            if (HttpClients.unreachable(e)) {
+                throw new SourceUnavailableException(system(), e.getMessage());
+            }
             LOG.warn("Prometheus: alert non letti: {}", e.getMessage());
             return new SourceResult<>(List.of(), false);
         }
