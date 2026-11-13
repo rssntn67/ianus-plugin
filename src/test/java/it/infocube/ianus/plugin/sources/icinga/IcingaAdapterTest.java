@@ -192,4 +192,12 @@ class IcingaAdapterTest {
 
         assertThat(adapter.metrics(window(5), QueryFilter.NONE).complete()).isTrue();
     }
+
+    @Test
+    void unknownStateKeepsNativeValue() {
+        assertThat(IcingaAdapter.stateName(true, 1)).isEqualTo("DOWN");
+        assertThat(IcingaAdapter.stateName(false, 3)).isEqualTo("UNKNOWN");
+        assertThat(IcingaAdapter.stateName(true, 2)).isEqualTo("2");
+        assertThat(IcingaAdapter.stateName(false, 7)).isEqualTo("7");
+    }
 }

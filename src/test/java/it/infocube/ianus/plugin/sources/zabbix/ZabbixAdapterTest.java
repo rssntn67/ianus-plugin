@@ -302,4 +302,12 @@ class ZabbixAdapterTest {
         assertThat(e.severity()).isEqualTo(Severity.ERROR);
         assertThat(e.labels()).containsEntry("value", "problem");
     }
+
+    @Test
+    void missingEventSeverityIsWarning() {
+        RawEvent e = ZabbixAdapter.toRaw(Map.of("eventid", "1", "clock", "1792130472", "name", "High CPU",
+                "value", "1", "objectid", "13491"));
+        assertThat(e.nativeSeverity()).isEmpty();
+        assertThat(e.severity()).isEqualTo(Severity.WARNING);
+    }
 }

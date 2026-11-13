@@ -168,9 +168,10 @@ public class IcingaAdapter implements SourceAdapter {
         }
     }
 
+    /** Uno stato fuori scala resta il numero nativo, cosi' diventa WARNING e viene segnalato (sezione 6.1). */
     static String stateName(boolean host, int state) {
         String[] names = host ? HOST_STATES : SERVICE_STATES;
-        return state >= 0 && state < names.length ? names[state] : "UNKNOWN";
+        return state >= 0 && state < names.length ? names[state] : String.valueOf(state);
     }
 
     @Override

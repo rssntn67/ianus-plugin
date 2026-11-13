@@ -205,9 +205,11 @@ public class ZabbixAdapter implements SourceAdapter {
         }
         Double ns = Json.num(ev.get("ns"));
         Instant time = Instant.ofEpochSecond(clockSec.longValue(), ns == null ? 0 : ns.longValue());
+        // severita' assente: resta vuota, cosi' diventa WARNING e viene segnalata (sezione 6.1)
         Double sev = Json.num(ev.get("severity"));
-        int s = sev == null ? 0 : sev.intValue();
-        String nativeSeverity = s >= 0 && s < SEVERITIES.length ? SEVERITIES[s] : String.valueOf(s);
+        String nativeSeverity = sev == null ? ""
+                : sev.intValue() >= 0 && sev.intValue() < SEVERITIES.length ? SEVERITIES[sev.intValue()]
+                : String.valueOf(sev.intValue());
         List<Map<String, Object>> hosts = Json.maps(ev.get("hosts"));
         String host = hosts.isEmpty() ? "" : Json.str(hosts.get(0).get("host"), "");
         String state = "1".equals(Json.str(ev.get("value"))) ? "problem" : "ok";
