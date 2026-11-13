@@ -91,8 +91,8 @@ Ogni richiesta a `/ianus/**` viene registrata nel log con esito e durata. Ogni b
 registrato con durata della lettura, numero di elementi e `complete`.
 
 Errori: `400` finestra non supportata / `end` non allineato o futuro / finestra più vecchia della `retention`
-(`window_too_old`) / paginazione errata, `401` API key assente o errata, `404` sorgente non configurata,
-`503` nessun blocco raccolto per la finestra.
+(`window_too_old`) / parametri non validi (`window` mancante, `end` o `page`/`size` non validi), `401` API key
+assente o errata, `404` sorgente non configurata, `503` nessun blocco raccolto per la finestra.
 Il corpo contiene sempre `code` e `message`. `complete: false` indica una risposta parziale.
 
 ## Raccolta e consolidamento
@@ -127,11 +127,11 @@ divide ogni finestra supportata, se `collect-delay` è negativo, se `retention` 
   lettura) viene saltato fino al ciclo successivo, così il recupero prosegue con i più vecchi, e dopo 3 errori viene
   abbandonato.
 - Se l'NMS risulta giù il blocco non viene salvato e il recupero si ferma fino al ciclo successivo. L'NMS risulta giù
-  quando la connessione fallisce o risponde 502, 503 o 504 anche dopo i nuovi tentativi; per OpenNMS e Zabbix solo
-  se non è stato letto nessun lotto di metriche, oppure sulla prima lettura dell'inventario. Un altro errore HTTP o
-  dell'API su una parte della lettura, metriche o eventi, dà invece un blocco `complete: false` con i dati letti; su
-  tutti i lotti di metriche di OpenNMS e Zabbix, o sulla prima lettura dell'inventario, conta come errore sul blocco
-  (per esempio credenziali errate).
+  quando la connessione fallisce o va in timeout, o l'NMS risponde 502, 503 o 504 anche dopo i nuovi tentativi; per
+  OpenNMS e Zabbix solo se non è stato letto nessun lotto di metriche, oppure sulla prima lettura dell'inventario. Un
+  altro errore HTTP o dell'API su una parte della lettura, metriche o eventi, dà invece un blocco `complete: false`
+  con i dati letti; su tutti i lotti di metriche di OpenNMS e Zabbix, o sulla prima lettura dell'inventario, conta
+  come errore sul blocco (per esempio credenziali errate).
 - `capabilities` risponde con metriche e nodi dell'ultimo blocco, anche se l'NMS è giù. `history_depth` è la
   `retention`. `health` riporta `last_collected`, la fine dell'ultimo blocco raccolto, e risponde `DEGRADED` se un NMS
   non risponde o se una raccolta è ferma: l'ultimo blocco, o l'avvio se non ce n'è ancora uno, è più vecchio di due
@@ -145,8 +145,8 @@ divide ogni finestra supportata, se `collect-delay` è negativo, se `retention` 
 
 Verso tutti gli NMS il plugin fa fino a 3 tentativi, con attese di 200 ms e 1 secondo, su connessione
 fallita e su risposte 502, 503, 504. Il timeout di lettura e gli altri errori HTTP non si ripetono.
-Se durante la lettura a lotti di OpenNMS e Zabbix la connessione cade o l'NMS risponde 502, 503 o 504, la
-lettura si ferma e il blocco contiene quanto letto fino a quel punto, con `complete: false`.
+Se durante la lettura a lotti di OpenNMS e Zabbix la connessione cade o va in timeout, o l'NMS risponde 502, 503
+o 504, la lettura si ferma e il blocco contiene quanto letto fino a quel punto, con `complete: false`.
 
 ### OpenNMS
 - **Metriche**: Measurements API (`POST /rest/measurements`) sugli attributi dei grafici dei nodi

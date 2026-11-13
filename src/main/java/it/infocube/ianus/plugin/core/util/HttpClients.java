@@ -30,7 +30,7 @@ public final class HttpClients {
     private HttpClients() {
     }
 
-    /** NMS giu': connessione fallita, o risposta 502, 503 o 504 anche dopo i nuovi tentativi. */
+    /** NMS giu': connessione fallita o in timeout, o risposta 502, 503 o 504 anche dopo i nuovi tentativi. */
     public static boolean unreachable(RuntimeException e) {
         return e instanceof ResourceAccessException
                 || e instanceof HttpStatusCodeException h && TEMPORARY.contains(h.getStatusCode().value());
