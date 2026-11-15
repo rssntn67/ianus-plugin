@@ -98,6 +98,12 @@ public class BlockStore {
         return Optional.ofNullable(blocks.lastEntry()).map(e -> e.getValue().toBlock());
     }
 
+    /** Ultimo blocco completo, o l'ultimo se nessuno e' completo. */
+    public Optional<Block> latestComplete() {
+        return blocks.descendingMap().values().stream().filter(Stored::complete).findFirst()
+                .map(Stored::toBlock).or(this::latest);
+    }
+
     private Stored store(Block block) {
         List<Point> points = block.metrics().stream().map(s -> {
             Identity identity = new Identity(s.node(), s.metric(), s.instance(), s.unit(), s.labels());

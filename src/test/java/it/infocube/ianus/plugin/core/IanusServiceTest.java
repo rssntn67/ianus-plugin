@@ -205,6 +205,23 @@ class IanusServiceTest {
     }
 
     @Test
+    void capabilitiesPreferLatestCompleteBlock() {
+        collectors.store("fake").put(block(-5, true, series("a", "1", 1.0),
+                new MetricSeries("a", "mem_usage", "", "percent", 1.0, 1.0, 1.0, 1, Map.of())));
+        collectors.store("fake").put(block(0, false, series("a", "1", 1.0)));
+
+        assertThat(service.capabilities("fake").metrics()).containsExactly("cpu_usage", "mem_usage");
+    }
+
+    @Test
+    void capabilitiesFallBackToLatestIncompleteBlock() {
+        collectors.store("fake").put(block(-5, false, series("vecchio", "1", 1.0)));
+        collectors.store("fake").put(block(0, false, series("a", "1", 1.0)));
+
+        assertThat(service.capabilities("fake").nodes()).containsExactly("a");
+    }
+
+    @Test
     void capabilitiesWithoutBlocksAreEmpty() {
         CapabilitiesResponse r = service.capabilities("fake");
 

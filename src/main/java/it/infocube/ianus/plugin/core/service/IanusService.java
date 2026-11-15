@@ -90,11 +90,12 @@ public class IanusService {
                 new PageInfo(paging.number(), paging.size(), items.size()), slice(items, paging));
     }
 
+    /** Metriche e nodi dall'ultimo blocco completo: uno incompleto puo' non avere tutte le serie. */
     public CapabilitiesResponse capabilities(String source) {
         SourceAdapter adapter = adapter(source);
         TreeSet<String> metrics = new TreeSet<>();
         TreeSet<String> nodes = new TreeSet<>();
-        collectors.store(adapter.system()).latest().ifPresent(b -> {
+        collectors.store(adapter.system()).latestComplete().ifPresent(b -> {
             b.metrics().forEach(s -> {
                 metrics.add(s.metric());
                 nodes.add(s.node());

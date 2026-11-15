@@ -132,10 +132,10 @@ divide ogni finestra supportata, se `collect-delay` è negativo, se `retention` 
   altro errore HTTP o dell'API su una parte della lettura, metriche o eventi, dà invece un blocco `complete: false`
   con i dati letti; su tutti i lotti di metriche di OpenNMS e Zabbix, o sulla prima lettura dell'inventario, conta
   come errore sul blocco (per esempio credenziali errate).
-- `capabilities` risponde con metriche e nodi dell'ultimo blocco, anche se l'NMS è giù. `history_depth` è la
-  `retention`. `health` riporta `last_collected`, la fine dell'ultimo blocco raccolto, e risponde `DEGRADED` se un NMS
-  non risponde o se una raccolta è ferma: l'ultimo blocco, o l'avvio se non ce n'è ancora uno, è più vecchio di due
-  `collect-interval` più `collect-delay`.
+- `capabilities` risponde con metriche e nodi dell'ultimo blocco completo (o dell'ultimo, se nessuno è completo),
+  anche se l'NMS è giù. `history_depth` è la `retention`. `health` riporta `last_collected`, la fine dell'ultimo
+  blocco raccolto, e risponde `DEGRADED` se un NMS non risponde o se una raccolta è ferma: l'ultimo blocco, o l'avvio
+  se non ce n'è ancora uno, è più vecchio di due `collect-interval` più `collect-delay`.
 - La storia sta in memoria e riparte vuota a ogni riavvio. Una misura con 50.000 serie e 3 ore di blocchi da 5 minuti
   ha dato circa 110 MB, a cui si aggiunge la memoria per le risposte: come punto di partenza usare `-Xmx1g`.
 - Il log avvisa se un ciclo dura più di `collect-interval`. Su OpenNMS, con `batch-size` 50 e decine di migliaia di
